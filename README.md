@@ -2,8 +2,6 @@
 
 This Joplin plugin allows you to create collapsible blocks with a title and extendable body.
 
-**Note**: Requires Joplin 1.7.11+
-
 **Version**: 1.0
 
 
@@ -32,86 +30,86 @@ In order to create a collapsible block, you can:
 
 ```
 :{Block title
-Block body here
-And here
-And here...
+    Block body here
+    And here
+    And here...
 }:
 ```
 
-The title of the block must always appear on the same line as the :{. You can choose to put the }: on the same line as the last line of body text, or on its own line. 
+The title of the block must always appear on the same line as the :{. A title may be omitted. You can choose to put the }: on the same line as the last line of body text, or on its own line. Indenting the body text is optional but recommended. The following examples are all valid: 
+
+**Examples**:
+```
+:{}:
+
+:{Title}:
+
+:{
+}:
+
+:{Title
+}:
+
+:{
+Body}:
+
+:{
+Body
+}:
+
+:{Title
+Body
+}:
+
+:{Title
+    Body
+}:
+```
+(for readability, the last way is recommended)
 
 Blocks will remember if you left them opened or closed. They will do so by editing the opener in the editor from :{ to :{:{ when opened, or back to :{ when closed. You may also do this manually. 
+
+When nesting blocks within blocks, they will be color-coordinated in both the editor and webview. If this is unwanted, it can be disabled by setting doEditorColors, doWebviewColors, or both from `true` to `false` in `config.json`. 
 
 **Example**:
 ```
 :{3 ways to check if an Object has a property in JS
+    Using:
+    1. `hasOwnProperty()` method
+    2. `in` operator
+    3. Comparing with `undefined`
+    * * *
+    1) `hasOwnProperty()`
+    ~~~js
+    const hero = {
+      name: 'Batman'
+    };
 
-Using:
-1. `hasOwnProperty()` method
-2. `in` operator
-3. Comparing with `undefined`
-* * *
-1) `hasOwnProperty()`
-~~~js
-const hero = {
-  name: 'Batman'
-};
+    hero.toString; // => function() {...}
 
-hero.toString; // => function() {...}
-
-hero.hasOwnProperty('toString'); // => false
-~~~
-* * *
-
+    hero.hasOwnProperty('toString'); // => false
+    ~~~
+    * * *
 }:
 ```
 
 ## Custom styles
 
-If you would like to style the spoiler blocks to your preference, use the following in your `userstyle.css` file:
+If you would like to style the collapsible blocks to your preference, use the following in your `userstyle.css` file:
 
 
 ```css
-/* Styling of the spoiler block title */
-.summary-title {
+/* Styling of the collapsible block title */
+.cb > summary {
   
 }
 
-/* Styling of the spoiler block body */
-.summary-content {
+/* Styling of the collapsible block body */
+.cb {
   
-}
-```
-
-### Exporting styles
-
-By default when exporting with spoiler blocks, the blocks get extended, show the body and hides the arrows. Inline spoilers stay hidden.
-
-Alternately, if you would like to style the spoiler blocks to your liking when exporting, use the following in you `userstyle.css` file:
-```css
-@media print {
-
-  /* Hides the side arrow */
-  .summary-title:before {
-      content: "";
-  }
-
-  /* Container for spoiler blocks */
-  .spoiler-block {}
-
-  /* Container for spoiler title */
-  #spoiler-block-title {}
-  
-  /* Container for spoiler body */
-  #spoiler-block-body {
-      /* Shows the body contents */
-      display: block;
-      animation: none;
-  }
-
 }
 ```
 
 ## Notes
 
-- **There might be bugs**, [report them here](https://github.com/martinkorelic/joplin-plugin-spoilers/issues) and I'll try to fix them when I'll find time.
+- **There might be bugs**, [report them here](https://github.com/ntczkjfg/joplin-plugin-collapsible-block/issues) and I'll try to fix them if I can.

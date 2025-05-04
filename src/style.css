@@ -1,0 +1,122 @@
+details.cb-details {
+    border-radius: 8px;
+    margin-left: 5px;
+    margin-bottom: 5px;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+details.cb-details summary:hover {
+    color: #66b2ff;
+}
+
+@media (prefers-color-scheme: dark) {
+    details.cb-details {
+        border: 2px solid #a0a0a0;
+        background-color: #303030;
+    }
+    div.cb-nest-0, .cb-details.cb-nest-0 > summary {
+        color: #a0a0a0;
+    }
+    .cb-details.cb-nest-0 {
+        border-color: #a0a0a0;
+    }
+}
+
+@media (prefers-color-scheme: light) {
+    details.cb-details {
+        border: 2px solid #404040;
+        background-color: #f0f0f0;
+    }
+    div.cb-nest-0, .cb-details.cb-nest-0 > summary {
+        color: #404040;
+    }
+    .cb-details.cb-nest-0 {
+        border-color: #404040;
+    }
+}
+details.cb-details p {
+    margin: 0;
+}
+
+/* Removes codeblock styling from collapsible sections of text in the editor */
+.cb.cm-codeBlock {
+    border: none;
+    background-color: transparent;
+    font: inherit;
+}
+
+/* Any styles to apply to all collapsible blocks in the webview */
+div.cb {
+
+}
+
+/*
+div.cb-nest-n targets text in the editor
+.cb-details.cb-nest-n > summary targets the title of the collapsible in the webview
+.cb-details.cb-nest-n targets the collapsible int he webview
+*/
+div.cb-nest-1, .cb-details.cb-nest-1 > summary {
+    color: firebrick;
+}
+.cb-details.cb-nest-1 {
+    border-color: firebrick;
+}
+
+div.cb-nest-2, .cb-details.cb-nest-2 > summary {
+    color: darkorange;
+}
+.cb-details.cb-nest-2 {
+    border-color: darkorange;
+}
+
+div.cb-nest-3, .cb-details.cb-nest-3 > summary {
+    color: gold;
+}
+.cb-details.cb-nest-3 {
+    border-color: gold;
+}
+
+div.cb-nest-4, .cb-details.cb-nest-4 > summary {
+    color: seagreen;
+}
+.cb-details.cb-nest-4 {
+    border-color: seagreen;
+}
+
+div.cb-nest-5, .cb-details.cb-nest-5 > summary {
+    color: steelblue;
+}
+.cb-details.cb-nest-5 {
+    border-color: steelblue;
+}
+
+div.cb-nest-6, .cb-details.cb-nest-6 > summary {
+    color: mediumslateblue;
+}
+.cb-details.cb-nest-6 {
+    border-color: mediumslateblue;
+}
+
+div.cb-nest-7, .cb-details.cb-nest-7 > summary {
+    color: darkorchid;
+}
+.cb-details.cb-nest-7 {
+    border-color: darkorchid;
+}
+
+/*
+"firebrick"
+"indianred"
+"darkorange"
+"goldenrod"
+"darkolivegreen"
+"seagreen"
+"steelblue"
+"royalblue"
+"mediumslateblue"
+"mediumvioletred"
+"darkorchid"
+"sienna"
+"saddlebrown"
+"peru"
+*/
