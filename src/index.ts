@@ -63,7 +63,7 @@ joplin.plugins.register({
 				const startToken = ':{';
 				await openOrCloseBlock(joplin, startToken, pendingMessages);
 				pendingMessages = [];
-			}, 1000);
+			}, 250);
 	    });
 	},
 });

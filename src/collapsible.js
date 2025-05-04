@@ -7,16 +7,20 @@ module.exports =  {
               pluginId = context.pluginId;
         return {
             plugin: async function(markdownIt, options) {
-                const rules = [];
-                for (let i = 0; i < markdownIt.block.ruler.__rules__.length; i++) {
-                    rules.push(markdownIt.block.ruler.__rules__[i].name);
-                }
                 markdownIt.block.ruler.before(markdownIt.block.ruler.__rules__[0].name,
                                               'collapsibleBlock',
                                               function (state, start, end, silent) {
                                                   return collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId);
+                                              }),
+                // This entire rule just exists to make indentation errors more forgiving
+                // When a valid collapsible block would otherwise get swallowed up by the
+                // paragraph rule due to excessive indentation, this stops it from being swallowed
+                markdownIt.block.ruler.before('paragraph',
+                                              'excessivelyIndentedCollapsibleBlock',
+                                              function (state, start, end, silent) {
+                                                  return excessivelyIndentedCollapsibleBlock(state, start, end, silent, startToken, endToken, pluginId);
                                               },
-                                              { alt: rules });
+                                              { alt: [ 'paragraph' ] });
             },
             assets: () => {
                 return [ { name: 'style.css' } ];
@@ -25,6 +29,26 @@ module.exports =  {
     },
     openOrCloseBlock
 };
+
+function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startToken, endToken, pluginId) {
+    let nextLine = start + 1;
+    let success = false;
+    for (; nextLine < end && !state.isEmpty(nextLine); nextLine++) {
+        if (collapsibleBlock(state, nextLine, end, true, startToken, endToken, pluginId)) {
+            success = true
+            break
+        }
+    }
+    if (!success) {
+        return false;
+    }
+    if (silent) {
+        return true;
+    }
+    state.md.block.tokenize(state, start, nextLine);
+    state.line = nextLine
+    return collapsibleBlock(state, nextLine, end, false, startToken, endToken, pluginId)
+}
 
 // Modifies the editor to indicate whether a block should be open or closed
 // Two copies of startToken indicate a block should be open, one copy closed
@@ -85,7 +109,6 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
     lastStart = start;
     let pos = state.bMarks[start] + state.tShift[start],
         max = state.eMarks[start];
-
     // Check if the line is too short
     if (pos + startToken.length > max) return false;
     // Check if the line doesn't start with startToken
@@ -194,14 +217,11 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
     // Set the content
     if (bodyEndLine !== undefined) {
         let blkIndent = 99999;
-        for (let i = start + 1, startPos, endPos, lineContent; i <= bodyEndLine; i++) {
+        for (let i = start + 1; i <= bodyEndLine; i++) {
             if (state.sCount[i] >= blkIndent) {
                 continue;
             }
-            startPos = state.bMarks[i] + state.tShift[i];
-            endPos = state.eMarks[i];
-            lineContent = state.src.slice(startPos, endPos);
-            if (lineContent !== '') {
+            if (!state.isEmpty(i)) {
                 blkIndent = Math.min(blkIndent, state.sCount[i]);
             }
         }
@@ -240,7 +260,7 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
         token.children = [];
     }
     if (lastLine) {
-        // Go back to the body token content and remove the end token from it
+        // The last line of the body also includes endToken - let's remove it from the relevant token
         // Last token is usually a paragraph_close, token we want is usually penultimate one
         // Checking up to last 3 tokens just in case of situations I didn't encounter
         for (let i = 1; i < 4; i++) {

@@ -1,6 +1,6 @@
 # Joplin Plugin - Collapsible block
 
-This Joplin plugin allows you to create collapsible blocks with a title and extendable body.
+This Joplin plugin allows you to create collapsible blocks with a title and extendable body. The blocks can be nested within each other, remember whether they were left open or closed, and color-coordinate between the editor and webview. 
 
 **Version**: 1.0
 
@@ -36,7 +36,7 @@ In order to create a collapsible block, you can:
 }:
 ```
 
-The title of the block must always appear on the same line as the :{. A title may be omitted. You can choose to put the }: on the same line as the last line of body text, or on its own line. Indenting the body text is optional but recommended. The following examples are all valid: 
+Nothing but whitespace may come before the `:{`. The title of the block must always appear on the same line as the `:{`. A title may be omitted. You can choose to put the `}:` on the same line as the last line of body text, or on its own line, but nothing is allowed to come after the `}:`. Indenting the body text is optional but recommended. In general it is designed to be extremely forgiving with how things are formatted and indented. The following examples are all valid: 
 
 **Examples**:
 ```
@@ -69,29 +69,7 @@ Body
 
 Blocks will remember if you left them opened or closed. They will do so by editing the opener in the editor from :{ to :{:{ when opened, or back to :{ when closed. You may also do this manually. 
 
-When nesting blocks within blocks, they will be color-coordinated in both the editor and webview. If this is unwanted, it can be disabled by setting doEditorColors, doWebviewColors, or both from `true` to `false` in `config.json`. 
-
-**Example**:
-```
-:{3 ways to check if an Object has a property in JS
-    Using:
-    1. `hasOwnProperty()` method
-    2. `in` operator
-    3. Comparing with `undefined`
-    * * *
-    1) `hasOwnProperty()`
-    ~~~js
-    const hero = {
-      name: 'Batman'
-    };
-
-    hero.toString; // => function() {...}
-
-    hero.hasOwnProperty('toString'); // => false
-    ~~~
-    * * *
-}:
-```
+When nesting blocks within blocks, they will be color-coordinated in both the editor and webview. If this is unwanted, it can be disabled by changing doEditorColors, doWebviewColors, or both from `true` to `false` in `config.json`. 
 
 ## Custom styles
 
