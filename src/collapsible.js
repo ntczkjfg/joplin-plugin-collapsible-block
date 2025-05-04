@@ -53,15 +53,16 @@ function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startTok
 // Modifies the editor to indicate whether a block should be open or closed
 // Two copies of startToken indicate a block should be open, one copy closed
 async function openOrCloseBlock(joplin, startToken, messages) {
-    // Get the currently selected note
-    const note = await joplin.workspace.selectedNote();
-    if (!note) return;
-    // Split note body into lines
-    let lines = note.body.split('\n');
     let lineNums = [];
+    const note = await joplin.workspace.selectedNote();
+    let   lines   = note.body.split('\n'); // Split note body into lines
     for (let i = messages.length - 1; i > -1; i--) {
-        let isOpen = messages[i].isOpen,
-            lineNum = messages[i].lineNum;
+        const isOpen  = messages[i].isOpen,
+              lineNum = messages[i].lineNum;
+              noteId  = messages[i].noteId; // Correct note ID
+        if (noteId !== note.id) {
+            continue;
+        }
         if (lineNums.includes(lineNum)) continue;
         lineNums.push(lineNum);
         // Get the line
@@ -103,10 +104,12 @@ let lastStart = 0;
 
 // Tokenizing the collapsible blocks
 function collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId) {
-    if (foundBlocks === undefined || start < lastStart) {
-        foundBlocks = [];
+    if (!silent) {
+        if (foundBlocks === undefined || start < lastStart) {
+            foundBlocks = [];
+        }
+        lastStart = start;
     }
-    lastStart = start;
     let pos = state.bMarks[start] + state.tShift[start],
         max = state.eMarks[start];
     // Check if the line is too short

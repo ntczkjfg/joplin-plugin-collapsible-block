@@ -1,4 +1,4 @@
 {
-  "doEditorColors": false,
-  "doWebviewColors": false
+  "doEditorColors": true,
+  "doWebviewColors": true
 }

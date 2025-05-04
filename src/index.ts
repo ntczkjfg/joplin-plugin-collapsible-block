@@ -54,16 +54,22 @@ joplin.plugins.register({
 	    // This then calls a function to modify the editor to save that change
 		let pendingMessages: { isOpen: boolean, lineNum: number }[] = [];
 		let debounceTimer: NodeJS.Timeout | null = null;
-		await joplin.contentScripts.onMessage(webScriptId, (message: { isOpen: boolean, lineNum: number }) => {
-			pendingMessages.push(message);
+		await joplin.contentScripts.onMessage(webScriptId, async (message: { isOpen: boolean, lineNum: number, noteId: string }) => {
 			if (debounceTimer) {
 				clearTimeout(debounceTimer);
 			}
+			const note = await joplin.workspace.selectedNote();
+			const noteId = note?.id;
+			if (!noteId) {
+				return;
+			}
+			message.noteId = noteId;
+			pendingMessages.push(message);
 			debounceTimer = setTimeout(async () => {
 				const startToken = ':{';
 				await openOrCloseBlock(joplin, startToken, pendingMessages);
 				pendingMessages = [];
-			}, 250);
+			}, 4000);
 	    });
 	},
 });
