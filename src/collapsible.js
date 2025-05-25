@@ -1,24 +1,24 @@
-const config = require('./config.json');
-
 module.exports =  {
     default: function(context) {
-        const startToken = ':{',
-              endToken   = '}:',
-              pluginId = context.pluginId;
+        const pluginId = context.pluginId;
         return {
             plugin: async function(markdownIt, options) {
-                markdownIt.block.ruler.before(markdownIt.block.ruler.__rules__[0].name,
+                const doWebviewColors = options.settingValue('doWebviewColors'),
+                      startToken = options.settingValue('startToken'),
+                      endToken = options.settingValue('endToken');
+                // Before code or else it doesn't work nicely with indentation
+                markdownIt.block.ruler.before('code',
                                               'collapsibleBlock',
                                               function (state, start, end, silent) {
-                                                  return collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId);
-                                              }),
+                                                  return collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors);
+                                              });
                 // This entire rule just exists to make indentation errors more forgiving
                 // When a valid collapsible block would otherwise get swallowed up by the
                 // paragraph rule due to excessive indentation, this stops it from being swallowed
                 markdownIt.block.ruler.before('paragraph',
                                               'excessivelyIndentedCollapsibleBlock',
                                               function (state, start, end, silent) {
-                                                  return excessivelyIndentedCollapsibleBlock(state, start, end, silent, startToken, endToken, pluginId);
+                                                  return excessivelyIndentedCollapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors);
                                               },
                                               { alt: [ 'paragraph' ] });
             },
@@ -26,15 +26,16 @@ module.exports =  {
                 return [ { name: 'style.css' } ];
             }
         };
-    },
-    openOrCloseBlock
+    }
 };
 
-function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startToken, endToken, pluginId) {
+// If collapsible blocks are being indented for formatting, they sometimes get swallowed by the paragraph rule
+// This simply runs before the paragraph rule to identify situations where we'd like the collapsible block rule to win instead
+function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors) {
     let nextLine = start + 1;
     let success = false;
     for (; nextLine < end && !state.isEmpty(nextLine); nextLine++) {
-        if (collapsibleBlock(state, nextLine, end, true, startToken, endToken, pluginId)) {
+        if (collapsibleBlock(state, nextLine, end, true, startToken, endToken, pluginId, doWebviewColors)) {
             success = true
             break
         }
@@ -47,65 +48,18 @@ function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startTok
     }
     state.md.block.tokenize(state, start, nextLine);
     state.line = nextLine
-    return collapsibleBlock(state, nextLine, end, false, startToken, endToken, pluginId)
+    return collapsibleBlock(state, nextLine, end, false, startToken, endToken, pluginId, doWebviewColors)
 }
 
-// Modifies the editor to indicate whether a block should be open or closed
-// Two copies of startToken indicate a block should be open, one copy closed
-async function openOrCloseBlock(joplin, startToken, messages) {
-    let lineNums = [];
-    const note = await joplin.workspace.selectedNote();
-    let   lines   = note.body.split('\n'); // Split note body into lines
-    for (let i = messages.length - 1; i > -1; i--) {
-        const isOpen  = messages[i].isOpen,
-              lineNum = messages[i].lineNum;
-              noteId  = messages[i].noteId; // Correct note ID
-        if (noteId !== note.id) {
-            continue;
-        }
-        if (lineNums.includes(lineNum)) continue;
-        lineNums.push(lineNum);
-        // Get the line
-        let line = lines[lineNum];
-
-        // Doesn't contain startToken? Should never happen
-        if (!line.includes(startToken)) continue;
-        // In case there's leading spaces
-        let startPos = line.indexOf(startToken);
-        if (isOpen) {
-            // block is open, so try to double startToken
-            if (line.length === startPos + startToken.length) {
-                // line is just startToken, so append another startToken to it
-                line += startToken;
-            } else {
-                // line has more than just startToken. If it's already doubled, continue
-                if (line.slice(startPos + startToken.length, startPos + 2*startToken.length) === startToken) continue;
-                // otherwise, splice it in. 
-                line = line.slice(0, startPos) + startToken + line.slice(startPos);
-            }
-        } else {
-            // block is closed, make sure startToken is not doubled
-            if (line.slice(startPos + startToken.length, startPos + 2*startToken.length) === startToken) {
-                // startToken is doubled - remove the first copy
-                line = line.slice(0, startPos) + line.slice(startPos + startToken.length);
-            } else continue;
-        }
-        // Replace line lineNum
-        lines[lineNum] = line;
-    }
-    const updatedBody = lines.join('\n');
-
-    // Update the note
-    await joplin.data.put(['notes', note.id], null, { body: updatedBody });
-}
-
+// These two used for tracking previously found collapsible blocks
+// for the purpose of determining nesting levels
 let foundBlocks;
 let lastStart = 0;
-
 // Tokenizing the collapsible blocks
-function collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId) {
+function collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors) {
     if (!silent) {
         if (foundBlocks === undefined || start < lastStart) {
+            // First time running, or starting over
             foundBlocks = [];
         }
         lastStart = start;
@@ -173,6 +127,7 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
     if (silent) {
         return true;
     }
+    // Add to foundBlocks, calculate nesting level
     foundBlocks.push([start, endLine]);
     let nestingLevel = 0;
     for (let i = 0; i < foundBlocks.length; i++) {
@@ -180,6 +135,7 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
             nestingLevel++;
         }
     }
+    // Mod 8 because that's how many colors we support
     nestingLevel = nestingLevel % 8;
     // openFlag determines if the block displays opened or closed by default
     let openFlag;
@@ -197,15 +153,15 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
     }
     token = state.push('details_open', 'details', 1);
     let classes;
-    if (config.doWebviewColors) {
+    if (doWebviewColors) {
         classes = `cb-details cb-nest-${nestingLevel}`;
     } else {
         classes = 'cb-details';
     }
-    // ontoggle sends message to index.ts, which calls openOrCloseBlock above
+    // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed
     token.attrs = [[ 'class', classes ],
                    [ 'ontoggle',   `if ((this.open !== !this.hasAttribute('closed')) || this.hasAttribute('debounce')) {
-                                        webviewApi.postMessage('${pluginId}', { isOpen: this.open, lineNum: ${state.line} });
+                                        webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle', data: { isOpen: this.open, lineNum: ${state.line} } });
                                         this.setAttribute('debounce', '');
                                     }` ],
                    openFlag];
@@ -219,21 +175,24 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
     state.push('summary_close', 'summary', -1);
     // Set the content
     if (bodyEndLine !== undefined) {
+        // Calculate the block indent as the smallest indent level present on any body line
         let blkIndent = 99999;
         for (let i = start + 1; i <= bodyEndLine; i++) {
             if (state.sCount[i] >= blkIndent) {
                 continue;
             }
-            if (!state.isEmpty(i)) {
-                blkIndent = Math.min(blkIndent, state.sCount[i]);
+            if (state.isEmpty(i)) { // Ignore empty lines
+                continue;
             }
+            blkIndent = state.sCount[i];
         }
-        const old = state.blkIndent;
+        // Send the body to be tokenized, then restore the old value of state.blkIndent
+        const old_blkIndent = state.blkIndent;
         try {
             state.blkIndent = blkIndent
             state.md.block.tokenize(state, start + 1, bodyEndLine + 1);
         } finally {
-            state.blkIndent = old;
+            state.blkIndent = old_blkIndent;
         }
     }
     // This entire for loop just removes code blocks, which are sometimes created against my will while indenting
