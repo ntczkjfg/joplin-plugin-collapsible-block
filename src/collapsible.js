@@ -151,6 +151,7 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
         // But I use it in the ontoggle call to only postMessage when it's actually relevant
         openFlag = [ 'closed', '' ];
     }
+    let token;
     token = state.push('details_open', 'details', 1);
     let classes;
     if (doWebviewColors) {

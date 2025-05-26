@@ -59,7 +59,7 @@ joplin.plugins.register({
 		        label: 'Do Editor Colors',
 		    },
 		    doWebviewColors: {
-		    	value: true,
+		    	value: false,
 		        type: 3, // Boolean
 		        section: 'collapsibleBlocks',
 		        public: true,
