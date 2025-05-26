@@ -84,15 +84,19 @@ When nesting blocks within blocks, they will be color-coded in the editor, and m
 ## Screenshots
 
 Three collapsibles, with one nested inside another, all closed
+
 ![](screenshots/1.png)
 
 With the two outer ones opened
+
 ![](screenshots/2.png)
 
 With all three opened
+
 ![](screenshots/3.png)
 
 With a fourth one added, for three nesting levels, and webview colors enabled
+
 ![](screenshots/4.png)
 
 ## Custom styles
