@@ -81,6 +81,16 @@ Blocks will remember if you left them opened or closed. They will do so by editi
 
 When nesting blocks within blocks, they will be color-coded in the editor, and may also be color-coded in the webview. These can both be controlled in the plugin Settings tab. 
 
+## Screenshots
+
+![](screenshots/1.png)
+
+![](screenshots/1.png)
+
+![](screenshots/1.png)
+
+![](screenshots/1.png)
+
 ## Custom styles
 
 If you would like to style the collapsible blocks to your preference, use the following in your `userstyle.css` file, which can be accessed in `Joplin` → `Options` → `Appearance` → `Show Advanced Settings` → `Custom stylesheet for rendered Markdown`:
