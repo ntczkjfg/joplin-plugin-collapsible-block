@@ -53,7 +53,7 @@ div.cb {
 /*
 div.cb-nest-n targets text in the editor
 .cb-details.cb-nest-n > summary targets the title of the collapsible in the webview
-.cb-details.cb-nest-n targets the collapsible int he webview
+.cb-details.cb-nest-n targets the collapsible in the webview
 */
 div.cb-nest-1, .cb-details.cb-nest-1 > summary {
     color: firebrick;

@@ -6,7 +6,6 @@ Although the blocks this plugin creates are only collapsible in the webview, not
 
 **Version**: 1.0
 
-
 ## Installation
 
 - Open Joplin and navigate to `Preferences > Plugins`
@@ -37,7 +36,7 @@ In order to create a collapsible block, you can:
 }:
 ```
 
-Nothing but whitespace may come before the `:{`. The title of the block must always appear on the same line as the `:{`. A title may be omitted. You can choose to put the `}:` on the same line as the last line of body text, or on its own line, but nothing is allowed to come after the `}:`. Indenting the body text is optional but recommended. In general, this plugin is designed to be extremely forgiving with how things are formatted and indented. The following examples are all valid: 
+Nothing but whitespace may come before the `:{`. The title of the block must always appear on the same line as the `:{`. A title may be omitted. You can choose to put the `}:` on the same line as the last line of body text, or on its own line, but nothing is allowed to come after the `}:`. Indenting the body text is optional but recommended. In general, this plugin is designed to be extremely forgiving with how things are formatted and indented. The following examples (and more!) are all valid: 
 
 **Examples**:
 ```
@@ -58,6 +57,16 @@ Body}:
 Body
 }:
 
+:{
+    Body
+}:
+
+:{Title
+Body}:
+
+:{Title
+    Body}:
+
 :{Title
 Body
 }:
@@ -74,21 +83,40 @@ When nesting blocks within blocks, they will be color-coded in the editor, and m
 
 ## Custom styles
 
-If you would like to style the collapsible blocks to your preference, use the following in your `userstyle.css` file:
-
+If you would like to style the collapsible blocks to your preference, use the following in your `userstyle.css` file, which can be accessed in `Joplin` → `Options` → `Appearance` → `Show Advanced Settings` → `Custom stylesheet for rendered Markdown`:
 
 ```css
-/* Styling of the collapsible block title */
-.cb > summary {
-  
+/* Styling of the collapsible block */
+details.cb-details {
+
 }
 
-/* Styling of the collapsible block body */
-.cb {
-  
+/* Styling of the collapsible block title */
+details.cb-details summary {
+
+}
+
+/* Below are used for styling nested collapsible blocks, and will only
+be applied if "Do Webview Colors" is enabled in the plugin settings */
+
+/* Styling of nested collapsible blocks - use n = 0-7 */
+.cb-details.cb-nest-n {
+
+}
+
+/* Styling of nested collapsible block titles - use n = 0-7 */
+.cb-details.cb-nest-n > summary {
+
 }
 ```
+
+## Settings
+There is a settings page for the plugin in the Joplin options. There, you can customize the start and end tokens away from the default `:{` and `}:`, or enable/disable the color coding in the webview and editor. 
 
 ## Notes
 
 - **There might be bugs**, [report them here](https://github.com/ntczkjfg/joplin-plugin-collapsible-block/issues) and I'll try to fix them if I can.
+
+## Acknowledgement
+
+Thanks to the creator of the [Joplin Spoilers](https://github.com/martinkorelic/joplin-plugin-spoilers) plugin, whose code helped me build this plugin. 
