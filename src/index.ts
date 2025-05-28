@@ -111,19 +111,9 @@ joplin.plugins.register({
 		await joplin.contentScripts.register(
 			ContentScriptType.MarkdownItPlugin,
 			webScriptId,
-			'./collapsible.js'
+			'webviewScript.js'
 		);
-
-		// The editor plugin
-		const editorScriptId = 'joplin.plugin.collapsible.blocks.editor';
-        // Register the CodeMirror content script
-        await joplin.contentScripts.register(
-            ContentScriptType.CodeMirrorPlugin,
-            editorScriptId,
-            './editorScript.js'
-        );
-
-	    // When a collapsible section is opened or closed, it sends a message here
+		// When a collapsible section is opened or closed, it sends a message here
 	    // This then calls a function to modify the editor to save that change
 		await joplin.contentScripts.onMessage(webScriptId, async (message: { name: string, data: { [key: string]: any } }) => {
 			const startToken = await joplin.settings.value('startToken');
@@ -143,6 +133,14 @@ joplin.plugins.register({
 			}
 		});
 
+		// The editor plugin
+		const editorScriptId = 'joplin.plugin.collapsible.blocks.editor';
+        // Register the CodeMirror content script
+        await joplin.contentScripts.register(
+            ContentScriptType.CodeMirrorPlugin,
+            editorScriptId,
+            'editorScript.js'
+        );
 		// The editor script sends a message here to receive settings
 		await joplin.contentScripts.onMessage(editorScriptId, async (message: { name: string, data: { [key: string]: any } }) => {
 			switch (message.name) {
