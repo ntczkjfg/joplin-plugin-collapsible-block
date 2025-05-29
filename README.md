@@ -1,10 +1,10 @@
-# Joplin Plugin - Collapsible block
+# Joplin Plugin - Collapsible blocks
 
 This Joplin plugin allows you to create collapsible blocks with a title and extendable body. The blocks can be nested within each other, remember whether they were left open or closed, and color-coordinate between the editor and webview. 
 
 Although the blocks this plugin creates are only collapsible in the webview, not the editor, it seems to pair well with the "Extra Markdown Editor Settings" plugin, which does allow for collapsing text in the editor, if "Enable code folding" is enabled in its settings. The collapsible blocks made by this plugin are detected by it as code, and are editor-foldable. If you're nesting collapsible blocks, only the outermost one (in the editor) will be foldable with this method. 
 
-**Version**: 1.0.3
+**Version**: 1.0.4
 
 ## Installation
 
@@ -129,7 +129,7 @@ be applied if "Do Webview Colors" is enabled in the plugin settings */
 ```
 
 ## Settings
-There is a settings page for the plugin in the Joplin options. There, you can customize the start and end tokens away from the default `:{` and `}:`, or enable/disable the color coding in the webview and editor. 
+There is a settings page for the plugin in the Joplin options. There, you can customize the start and end tokens away from the default `:{` and `}:`, or enable/disable the color coding in the webview and editor. You can also disable the plugin's ability to remember if a collapsible block was last left open or closed in the webview, relying solely on how you define it in the editor. 
 
 ## Notes
 

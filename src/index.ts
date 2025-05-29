@@ -2,14 +2,26 @@ import joplin from 'api';
 import { ContentScriptType, ToolbarButtonLocation } from 'api/types';
 
 // Modifies the editor whenever a block is opened or closed
-async function openOrCloseBlock(closedToken: string, lineNum, isOpen, noteId) {
+async function openOrCloseBlock(closedToken: string, lineNum, isOpen, noteId, isMobile) {
     const note = await joplin.workspace.selectedNote();
     const openedToken = closedToken + closedToken;
 
     if (noteId !== note.id) return;
 
     // The relevant line from the editor
-    const line: string = await joplin.commands.execute('editor.execCommand', { name: 'getLine', args: [lineNum] });
+    let line: string;
+    let lines: string[];
+    if (isMobile) {
+    	// The Desktop method is better, in that it only modifies the relevant line, and preserves scroll position on desktop
+    	// However, it simply does not work on mobile
+    	// This method works fine on both, but is inferior on Desktop
+    	// So, we do whichever is most appropriate based on the platform - same below, at the end of this function
+    	lines = note.body.split('\n');
+    	if (lineNum < 0 || lineNum >= lines.length) return;
+    	line = lines[lineNum];
+    } else {
+    	line = await joplin.commands.execute('editor.execCommand', { name: 'getLine', args: [lineNum] });
+    }
 
     // It should be guaranteed that the line starts with our token, possibly after whitespace
     // Calculate its actual start position - quit if for some reason it's not there
@@ -34,50 +46,69 @@ async function openOrCloseBlock(closedToken: string, lineNum, isOpen, noteId) {
 
     // Only bother updating the editor if we changed something
     if (newLine !== line) {
-        await joplin.commands.execute('editor.execCommand',
-        							  {
-        							      name: 'replaceRange',
-								   	      args: [newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: line.length }]
-								   	  });
+    	if (isMobile) {
+    		lines[lineNum] = newLine;
+    		await joplin.data.put(['notes', note.id], null, { body : lines.join('\n') });
+    	} else {
+    		await joplin.commands.execute('editor.execCommand',
+        							      { name: 'replaceRange',
+								   	        args: [newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: line.length }]});
+    	}
     }
 }
-
 
 joplin.plugins.register({
 	onStart: async function() {
 		// Create the settings page
 		await joplin.settings.registerSection('collapsibleBlocks', {
 		    label: 'Collapsible Blocks',
-		    iconName: 'fas fa-angle-right',
+		    description: 'Collapsible Blocks Plugin Settings',
+		    iconName: 'fas fa-angle-right'
 		});
+		const isMobile = (await joplin.versionInfo()).platform === 'mobile';
 		await joplin.settings.registerSettings({
 		    doEditorColors: {
 		        value: true,
 		        type: 3, // Boolean
 		        section: 'collapsibleBlocks',
 		        public: true,
-		        label: 'Do Editor Colors',
+		        label: 'Do Editor Colors'
 		    },
 		    doWebviewColors: {
 		    	value: false,
 		        type: 3, // Boolean
 		        section: 'collapsibleBlocks',
 		        public: true,
-		        label: 'Do Webview Colors',
+		        label: 'Do Webview Colors'
 		    },
 		    startToken: {
 		        value: ':{', // Default start token
 		        type: 2, // String
 		        section: 'collapsibleBlocks',
 		        public: true,
-		        label: 'Start Token',
+		        label: 'Start Token'
 		    },
 		    endToken: {
 		        value: '}:', // Default end token
 		        type: 2, // String
 		        section: 'collapsibleBlocks',
 		        public: true,
-		        label: 'End Token',
+		        label: 'End Token'
+		    },
+		    rememberOpenOrClose: {
+		    	value: true,
+		    	type: 3, // Boolean
+		    	section: 'collapsibleBlocks',
+		    	public: true,
+		    	label: 'Remember when a collapsible block is left opened or closed in the webview',
+		    	description: 'If disabled, opening or closing collapsible blocks in the webview will not change their state in the editor, which will cause them to always display as opened or closed, depending on their state in the editor, when a note is reloaded.'
+		    },
+		    isMobile: {
+		    	value: isMobile,
+		    	type: 3, // Boolean
+		    	section: 'collapsibleBlocks',
+		    	public: false,
+		    	label: 'isMobile'
 		    }
 		});
 
@@ -119,6 +150,9 @@ joplin.plugins.register({
 			const startToken = await joplin.settings.value('startToken');
 			switch (message.name) {
 				case 'collapsibleToggle':
+					if (!(await joplin.settings.value('rememberOpenOrClose'))) {
+						break;
+					}
 					const note = await joplin.workspace.selectedNote();
 					const noteId = note?.id;
 					if (!noteId) {
@@ -126,7 +160,11 @@ joplin.plugins.register({
 					}
 					const lineNum = message.data.lineNum;
 					const isOpen = message.data.isOpen;
-					await openOrCloseBlock(startToken, lineNum, isOpen, noteId);
+					const isMobile = await joplin.settings.value('isMobile');
+					await openOrCloseBlock(startToken, lineNum, isOpen, noteId, isMobile);
+					break;
+				case 'getSetting':
+					return await joplin.settings.value(message.data.setting);
 					break;
 				default:
 					break;

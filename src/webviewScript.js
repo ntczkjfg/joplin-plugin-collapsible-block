@@ -3,9 +3,9 @@ module.exports =  {
         const pluginId = context.pluginId;
         return {
             plugin: async function(markdownIt, options) {
-                const doWebviewColors = options.settingValue('doWebviewColors'),
-                      startToken = options.settingValue('startToken'),
-                      endToken = options.settingValue('endToken');
+                const doWebviewColors = options.settingValue('doWebviewColors');
+                const startToken = options.settingValue('startToken');
+                const endToken = options.settingValue('endToken');
                 // Before code or else it doesn't work nicely with indentation
                 markdownIt.block.ruler.before('code',
                                               'collapsibleBlock',
@@ -53,10 +53,13 @@ function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startTok
 
 // These two used for tracking previously found collapsible blocks
 // for the purpose of determining nesting levels
-let foundBlocks;
+let foundBlocks = [];
 let lastStart = 0;
 // Tokenizing the collapsible blocks
 function collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors) {
+    if (startToken === undefined || endToken === undefined) {
+        return false
+    }
     if (!silent) {
         if (foundBlocks === undefined || start < lastStart) {
             // First time running, or starting over
