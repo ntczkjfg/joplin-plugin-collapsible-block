@@ -132,7 +132,8 @@ joplin.plugins.register({
 					// No title or body, make our own
 					await joplin.commands.execute('insertText',`\n${startToken}${startToken}Title\n\tBody\n${endToken}`);
 				}
-			}
+			},
+			enabledCondition: 'markdownEditorPaneVisible && !richTextEditorVisible'
 		});
 		// Add it to the toolbar
 		await joplin.views.toolbarButtons.create('insertCollapsibleBlock', 'insertCollapsibleBlock', ToolbarButtonLocation.EditorToolbar);
@@ -150,9 +151,6 @@ joplin.plugins.register({
 			const startToken = await joplin.settings.value('startToken');
 			switch (message.name) {
 				case 'collapsibleToggle':
-					if (!(await joplin.settings.value('rememberOpenOrClose'))) {
-						break;
-					}
 					const note = await joplin.workspace.selectedNote();
 					const noteId = note?.id;
 					if (!noteId) {

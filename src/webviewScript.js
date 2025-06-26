@@ -3,14 +3,17 @@ module.exports =  {
         const pluginId = context.pluginId;
         return {
             plugin: async function(markdownIt, options) {
-                const doWebviewColors = options.settingValue('doWebviewColors');
-                const startToken = options.settingValue('startToken');
-                const endToken = options.settingValue('endToken');
+                const settings = {
+                    doWebviewColors: options.settingValue('doWebviewColors'),
+                    startToken: options.settingValue('startToken'),
+                    endToken: options.settingValue('endToken'),
+                    rememberOpenOrClose: options.settingValue('rememberOpenOrClose')
+                };
                 // Before code or else it doesn't work nicely with indentation
                 markdownIt.block.ruler.before('code',
                                               'collapsibleBlock',
                                               function (state, start, end, silent) {
-                                                  return collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors);
+                                                  return collapsibleBlock(state, start, end, silent, pluginId, settings);
                                               });
                 // This entire rule just exists to make indentation errors more forgiving
                 // When a valid collapsible block would otherwise get swallowed up by the
@@ -18,7 +21,7 @@ module.exports =  {
                 markdownIt.block.ruler.before('paragraph',
                                               'excessivelyIndentedCollapsibleBlock',
                                               function (state, start, end, silent) {
-                                                  return excessivelyIndentedCollapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors);
+                                                  return excessivelyIndentedCollapsibleBlock(state, start, end, silent, pluginId, settings);
                                               },
                                               { alt: [ 'paragraph' ] });
             },
@@ -31,11 +34,11 @@ module.exports =  {
 
 // If collapsible blocks are being indented for formatting, they sometimes get swallowed by the paragraph rule
 // This simply runs before the paragraph rule to identify situations where we'd like the collapsible block rule to win instead
-function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors) {
+function excessivelyIndentedCollapsibleBlock(state, start, end, silent, pluginId, settings) {
     let nextLine = start + 1;
     let success = false;
     for (; nextLine < end && !state.isEmpty(nextLine); nextLine++) {
-        if (collapsibleBlock(state, nextLine, end, true, startToken, endToken, pluginId, doWebviewColors)) {
+        if (collapsibleBlock(state, nextLine, end, true, pluginId, settings)) {
             success = true
             break
         }
@@ -48,7 +51,7 @@ function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startTok
     }
     state.md.block.tokenize(state, start, nextLine);
     state.line = nextLine
-    return collapsibleBlock(state, nextLine, end, false, startToken, endToken, pluginId, doWebviewColors)
+    return collapsibleBlock(state, nextLine, end, false, pluginId, settings)
 }
 
 // These two used for tracking previously found collapsible blocks
@@ -56,7 +59,8 @@ function excessivelyIndentedCollapsibleBlock(state, start, end, silent, startTok
 let foundBlocks = [];
 let lastStart = 0;
 // Tokenizing the collapsible blocks
-function collapsibleBlock(state, start, end, silent, startToken, endToken, pluginId, doWebviewColors) {
+function collapsibleBlock(state, start, end, silent, pluginId, settings) {
+    const { startToken, endToken, doWebviewColors, rememberOpenOrClose } = settings;
     if (startToken === undefined || endToken === undefined) {
         return false
     }
@@ -85,6 +89,9 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
     if (state.src.slice(max - endToken.length, max) === endToken) {
         // endToken is on same line as startToken - set the title, and we have no body
         title = state.src.slice(pos, max - endToken.length);
+        if (title.endsWith(endToken)) {
+            title = state.src.slice(pos, max - 2*endToken.length);
+        }
         endLine = start;
     } else {
         if (pos !== max) {
@@ -154,6 +161,11 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
         // But I use it in the ontoggle call to only postMessage when it's actually relevant
         openFlag = [ 'closed', '' ];
     }
+    // noToggleFlag determines if opening or closing the block will save its state
+    let noToggleFlag = false;
+    if (state.src.slice(state.eMarks[endLine] - 2*endToken.length, state.eMarks[endLine]) === endToken + endToken) {
+        noToggleFlag = true;
+    }
     let token;
     token = state.push('details_open', 'details', 1);
     let classes;
@@ -162,13 +174,18 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
     } else {
         classes = 'cb-details';
     }
-    // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed
-    token.attrs = [[ 'class', classes ],
-                   [ 'ontoggle',   `if ((this.open !== !this.hasAttribute('closed')) || this.hasAttribute('debounce')) {
-                                        webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle', data: { isOpen: this.open, lineNum: ${state.line} } });
-                                        this.setAttribute('debounce', '');
-                                    }` ],
-                   openFlag];
+    if (rememberOpenOrClose && !noToggleFlag) {
+        // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed
+        token.attrs = [[ 'class', classes ],
+                       [ 'ontoggle',   `if ((this.open !== !this.hasAttribute('closed')) || this.hasAttribute('debounce')) {
+                                            webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle', data: { isOpen: this.open, lineNum: ${state.line} } });
+                                            this.setAttribute('debounce', '');
+                                        }` ],
+                       openFlag];
+    } else {
+        token.attrs = [[ 'class', classes ],
+                       openFlag];
+    }
     state.push('summary_open', 'summary', 1);
     // Set the summary
     if (title !== undefined) {
@@ -232,7 +249,11 @@ function collapsibleBlock(state, start, end, silent, startToken, endToken, plugi
         for (let i = 1; i < 4; i++) {
             let token = state.tokens[state.tokens.length - i];
             if (token.type === 'inline') {
-                token.content = token.content.slice(0, -endToken.length);
+                if (!noToggleFlag) {
+                    token.content = token.content.slice(0, -endToken.length);
+                } else {
+                    token.content = token.content.slice(0, -2*endToken.length);
+                }
                 break;
             }
         }
