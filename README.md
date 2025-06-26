@@ -4,7 +4,7 @@ This Joplin plugin allows you to create collapsible blocks with a title and exte
 
 Although the blocks this plugin creates are only collapsible in the webview, not the editor, it seems to pair well with the "Extra Markdown Editor Settings" plugin, which does allow for collapsing text in the editor, if "Enable code folding" is enabled in its settings. The collapsible blocks made by this plugin are detected by it as code, and are editor-foldable. If you're nesting collapsible blocks, only the outermost one (in the editor) will be foldable with this method. 
 
-**Version**: 1.1.0
+**Version**: 1.1.1
 
 ## Installation
 
@@ -81,7 +81,7 @@ Blocks will remember if you left them opened or closed. They will do so by editi
 
 If you don't want it to remember if you left a block opened or closed, you can turn this off globally in the plugin settings - or on a per-block basis by doubling the end token, from `}:` to `}:}:`. When you do this, you can still open and close the block in the webview, but they will not save their state in the editor - so the next time the note is loaded, they will be opened or closed again, depending on whether their opening token is `:{:{` or `:{`, respectively. So a block like `:{:{this}:}:` will always be initially open when you open a note, while a block like `:{this}:}:` will always be initially closed when you open a note. 
 
-When nesting blocks within blocks, they will be color-coded in the editor, and may also be color-coded in the webview. These can both be controlled in the plugin Settings tab. 
+When nesting blocks within blocks, they will be color-coded in the editor, and may also be color-coded in the webview. These can both be controlled (enabled or disabled) in the plugin Settings tab. 
 
 ## Screenshots
 

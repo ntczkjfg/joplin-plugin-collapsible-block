@@ -116,7 +116,8 @@ function collapsibleBlock(state, start, end, silent, pluginId, settings) {
                         // body will include all lines up to but not including the line with endToken
                         bodyEndLine = currentLine - 1;
                     }
-                    if (pos < max - endToken.length) {
+                    if (pos !== max - endToken.length &
+                        !(pos === max - 2*endToken.length && state.src.slice(pos, max) === endToken + endToken)) {
                         // There is body content on the same line as endToken - include it
                         bodyEndLine = currentLine;
                         lastLine = true;
@@ -244,11 +245,12 @@ function collapsibleBlock(state, start, end, silent, pluginId, settings) {
     }
     if (lastLine) {
         // The last line of the body also includes endToken - let's remove it from the relevant token
-        // Last token is usually a paragraph_close, token we want is usually penultimate one
-        // Checking up to last 3 tokens just in case of situations I didn't encounter
-        for (let i = 1; i < 4; i++) {
+        // Last token is usually a paragraph_close, token we want is usually penultimate one, but I've
+        // seen it be as late as the 4th-from-last. Checking up to last 8 tokens just in case of 
+        // situations I didn't encounter
+        for (let i = 1; i <= 8; i++) {
             let token = state.tokens[state.tokens.length - i];
-            if (token.type === 'inline') {
+            if (token.type === 'inline' && token.content.endsWith(endToken)) {
                 if (!noToggleFlag) {
                     token.content = token.content.slice(0, -endToken.length);
                 } else {
