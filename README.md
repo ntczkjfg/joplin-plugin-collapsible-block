@@ -109,7 +109,7 @@ There is a settings page for the plugin in the Joplin options. There, you can:
 
 ### Custom styles
 
-If you would like to style the collapsible blocks to your preference, use the following in your `userstyle.css` file, which can be accessed in `Joplin` → `Options` → `Appearance` → `Show Advanced Settings` → `Custom stylesheet for rendered Markdown`:
+If you would like to style the collapsible blocks to your preference, use the following in your `userstyle.css` file, which can be accessed in `Joplin` → `Tools` → `Options` → `Appearance` → `Show Advanced Settings` → `Custom stylesheet for rendered Markdown`:
 
 ```css
 /* Styling of the collapsible block */
