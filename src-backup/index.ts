@@ -1,5 +1,5 @@
 import joplin from 'api';
-import { ContentScriptType, ToolbarButtonLocation, SettingItemType } from 'api/types';
+import { ContentScriptType, ToolbarButtonLocation } from 'api/types';
 
 // Modifies the editor whenever a block is opened or closed
 async function openOrCloseBlock(closedToken: string, lineNum, isOpen, noteId, isMobile) {
@@ -69,71 +69,43 @@ joplin.plugins.register({
 		await joplin.settings.registerSettings({
 		    doEditorColors: {
 		        value: true,
-		        type: SettingItemType.Bool,
+		        type: 3, // Boolean
 		        section: 'collapsibleBlocks',
 		        public: true,
-		        label: 'Do Editor Colors',
-		        description: 'Color collapsible block text in the editor. If blocks are nested, each nesting layer is a different color. '
+		        label: 'Do Editor Colors'
 		    },
 		    doWebviewColors: {
 		    	value: false,
-		        type: SettingItemType.Bool,
+		        type: 3, // Boolean
 		        section: 'collapsibleBlocks',
 		        public: true,
-		        label: 'Do Webview Colors',
-		        description: `Change the color of the border of blocks in the webview, to match the text color of the text that made that block
-		         in the editor, if the above option is enabled. Useful when making edits to heavily nested groups of blocks. `
+		        label: 'Do Webview Colors'
 		    },
 		    startToken: {
 		        value: ':{', // Default start token
-		        type: SettingItemType.String,
+		        type: 2, // String
 		        section: 'collapsibleBlocks',
 		        public: true,
 		        label: 'Start Token'
 		    },
 		    endToken: {
 		        value: '}:', // Default end token
-		        type: SettingItemType.String,
+		        type: 2, // String
 		        section: 'collapsibleBlocks',
 		        public: true,
 		        label: 'End Token'
 		    },
 		    rememberOpenOrClose: {
 		    	value: true,
-		    	type: SettingItemType.Bool,
+		    	type: 3, // Boolean
 		    	section: 'collapsibleBlocks',
 		    	public: true,
 		    	label: 'Remember when a collapsible block is left opened or closed in the webview',
-		    	description: `If disabled, opening or closing collapsible blocks in the webview will 
-		    	not change their state in the editor, which will cause them to always display as opened 
-		    	or closed, depending on their state in the editor, when a note is reloaded. You can also
-		    	 do this on a case-by-case basis by doubling the end token for a given block. `
-		    },
-		    indentLevel: {
-		    	value: 15,
-		    	type: SettingItemType.Int,
-		    	minimum: 0,
-		    	maximum: 100,
-		    	step: 1,
-		    	section: 'collapsibleBlocks',
-		    	public: true,
-		    	label: 'Editor Block indentation level',
-		    	description: 'How much to visually indent block sections in the editor (0 for none). Unitless, but 10 is roughly equivalent to one tab.'
-		    },
-		    maxIndentLevel: {
-		    	value: 8,
-		    	type: SettingItemType.Int,
-		    	minimum: 0,
-		    	maximum: 100,
-		    	step: 1,
-		    	section: 'collapsibleBlocks',
-		    	public: true,
-		    	label: '',
-		    	description: 'How many nested layers of blocks to apply the above indentation level to, before maxing out.'
+		    	description: 'If disabled, opening or closing collapsible blocks in the webview will not change their state in the editor, which will cause them to always display as opened or closed, depending on their state in the editor, when a note is reloaded.'
 		    },
 		    isMobile: {
 		    	value: isMobile,
-		    	type: SettingItemType.Bool,
+		    	type: 3, // Boolean
 		    	section: 'collapsibleBlocks',
 		    	public: false,
 		    	label: 'isMobile'
@@ -151,24 +123,14 @@ joplin.plugins.register({
 				const startToken = await joplin.settings.value('startToken');
 				const endToken = await joplin.settings.value('endToken');
 				if (content.length == 1 && content[0] !== '') {
-					if (!content[0].startsWith(startToken)) {
-						// Just a title
-						await joplin.commands.execute('replaceSelection',`\n${startToken}${startToken}${content[0]}\n\n${endToken}\n`);
-					} else {
-						// content is another collapsible block - make it the body
-						await joplin.commands.execute('replaceSelection',`\n${startToken}${startToken}\n${content[0]}\n${endToken}\n`);
-					}
+					// Just a title
+					await joplin.commands.execute('replaceSelection',`\n${startToken}${startToken}${content[0]}\n\n${endToken}`);
 				} else if (content.length > 1) {
-					if (!content[0].startsWith(startToken)) {
-						// Title and body!
-						await joplin.commands.execute('replaceSelection',`\n${startToken}${startToken}${content[0]}\n${content.slice(1).join('\n')}\n${endToken}\n`);
-					} else {
-						// content is another block - make it all body
-						await joplin.commands.execute('replaceSelection',`\n${startToken}${startToken}\n${content.join('\n')}\n${endToken}\n`);
-					}
+					// Title and body!
+					await joplin.commands.execute('replaceSelection',`\n${startToken}${startToken}${content[0]}\n\t${content.slice(1).join('\n\t')}\n${endToken}`);
 				} else {
 					// No title or body, make our own
-					await joplin.commands.execute('insertText',`\n${startToken}${startToken}Title\nBody\n${endToken}\n`);
+					await joplin.commands.execute('insertText',`\n${startToken}${startToken}Title\n\tBody\n${endToken}`);
 				}
 			},
 			enabledCondition: 'markdownEditorPaneVisible && !richTextEditorVisible'
@@ -222,14 +184,12 @@ joplin.plugins.register({
 					return await joplin.settings.value(message.data.setting);
 					break;
 				case 'getSettings':
-					const [doEditorColors, startToken, endToken, indentLevel, maxIndentLevel] = await Promise.all([
+					const [doEditorColors, startToken, endToken] = await Promise.all([
 				        joplin.settings.value('doEditorColors'),
 				        joplin.settings.value('startToken'),
-				        joplin.settings.value('endToken'),
-				        joplin.settings.value('indentLevel'),
-				        joplin.settings.value('maxIndentLevel')
+				        joplin.settings.value('endToken')
 				    ]);
-				    const settings = { doEditorColors, startToken, endToken, indentLevel, maxIndentLevel };
+				    const settings = { doEditorColors, startToken, endToken };
 				    return settings;
 					break;
 				default:

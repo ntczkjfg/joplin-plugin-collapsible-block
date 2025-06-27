@@ -4,9 +4,9 @@ This Joplin plugin allows you to create collapsible blocks with a title and exte
 
 Although the blocks this plugin creates are only collapsible in the webview, not the editor, it seems to pair well with the "Extra Markdown Editor Settings" plugin, which does allow for collapsing text in the editor, if "Enable code folding" is enabled in its settings. The collapsible blocks made by this plugin are detected by it as code, and are editor-foldable. If you're nesting collapsible blocks, only the outermost one (in the editor) will be foldable with this method. 
 
-**Version**: 1.1.1
+**Version**: 1.2.0
 
-## Installation
+### Installation
 
 - Open Joplin and navigate to `Preferences > Plugins`
 - Search for `Collapsible blocks` and click install
@@ -30,13 +30,13 @@ In order to create a collapsible block, you can:
 
 ```
 :{Block title
-    Block body here
-    And here
-    And here...
+Block body here
+And here
+And here...
 }:
 ```
 
-Nothing but whitespace may come before the `:{`. The title of the block must always appear on the same line as the `:{`. A title may be omitted. You can choose to put the `}:` on the same line as the last line of body text, or on its own line, but nothing is allowed to come after the `}:`. Indenting the body text is optional but recommended. In general, this plugin is designed to be extremely forgiving with how things are formatted and indented. The following examples (and more!) are all valid: 
+Nothing but whitespace may come before the `:{`. The title of the block must always appear on the same line as the `:{`. A title may be omitted. You can choose to put the `}:` on the same line as the last line of body text, or on its own line, but nothing is allowed to come after the `}:`. In general, this plugin is designed to be extremely forgiving with how things are formatted and indented. The following examples (and more!) are all valid: 
 
 **Examples**:
 ```
@@ -65,17 +65,12 @@ Body
 Body}:
 
 :{Title
-    Body}:
-
-:{Title
 Body
-}:
-
-:{Title
-    Body
 }:
 ```
 (for readability, the last way is recommended)
+
+The text in the editor will use CSS to automatically indent blocks, based on how deeply nested the blocks are. This can be disabled or configured in the settings. 
 
 Blocks will remember if you left them opened or closed. They will do so by editing the opener in the editor from `:{` to `:{:{` when opened, or back to `:{` when closed. You may also do this manually. 
 
@@ -101,7 +96,18 @@ With a fourth one added, for three nesting levels, and webview colors enabled
 
 ![](screenshots/4.png)
 
-## Custom styles
+## Settings
+There is a settings page for the plugin in the Joplin options. There, you can:
+* Customize the start and end tokens away from the default `:{` and `}:`
+* Enable or disable the color coding in the webview and editor
+* Globally disable the plugin's ability to remember if a collapsible block's opened/closed status was changed in the webview
+* Disable automatic CSS indentation of collapsible block text in the editor, or configure it to indent more or less
+
+![](screenshots/settings.png)
+
+## Advanced
+
+### Custom styles
 
 If you would like to style the collapsible blocks to your preference, use the following in your `userstyle.css` file, which can be accessed in `Joplin` → `Options` → `Appearance` → `Show Advanced Settings` → `Custom stylesheet for rendered Markdown`:
 
@@ -130,8 +136,10 @@ be applied if "Do Webview Colors" is enabled in the plugin settings */
 }
 ```
 
-## Settings
-There is a settings page for the plugin in the Joplin options. There, you can customize the start and end tokens away from the default `:{` and `}:`, or enable/disable the color coding in the webview and editor. You can also disable the plugin's ability to remember if a collapsible block was last left open or closed in the webview, relying solely on how you define it in the editor. 
+## Troubleshooting
+If the collapsible block is not showing up, or is showing up but you're unable to toggle it opened or closed, then you're likely accidentally in the Rich Text Editor, instead of the Markdown Editor. Joplin's Rich Text Editor does [not support most Markdown plugins](https://joplinapp.org/help/apps/rich_text_editor/#limitations). To enter the Markdown editor, look for the controls in the image below, in the upper right of Joplin. Make sure the Markdown/Rich Text toggle is on the left (red) side, and then use the blue button to swap between the editor and webview. 
+
+![](screenshots/troubleshooting.png)
 
 ## Notes
 
@@ -139,7 +147,7 @@ There is a settings page for the plugin in the Joplin options. There, you can cu
 
 ## Acknowledgement
 
-Thanks to the creator of the [Joplin Spoilers](https://github.com/martinkorelic/joplin-plugin-spoilers) plugin, whose code helped me build this plugin. 
+Thanks to the creator of the [Joplin Spoilers](https://github.com/martinkorelic/joplin-plugin-spoilers) plugin, whose code helped me build this plugin. Our code bases and methodologies are wildly different at this point, but it got me started with Joplin plugins. 
 
 ## Other plugins
 

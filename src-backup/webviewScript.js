@@ -9,17 +9,19 @@ module.exports =  {
                     endToken: options.settingValue('endToken'),
                     rememberOpenOrClose: options.settingValue('rememberOpenOrClose')
                 };
+                // Before code or else it doesn't work nicely with indentation
                 markdownIt.block.ruler.before('code',
                                               'collapsibleBlock',
                                               function (state, start, end, silent) {
                                                   return collapsibleBlock(state, start, end, silent, pluginId, settings);
                                               });
+                // This entire rule just exists to make indentation errors more forgiving
                 // When a valid collapsible block would otherwise get swallowed up by the
-                // paragraph rule, this stops it from being swallowed
-                markdownIt.block.ruler.before('code',
-                                              'lastTryCollapsibleBlock',
+                // paragraph rule due to excessive indentation, this stops it from being swallowed
+                markdownIt.block.ruler.before('paragraph',
+                                              'excessivelyIndentedCollapsibleBlock',
                                               function (state, start, end, silent) {
-                                                  return lastTryCollapsibleBlock(state, start, end, silent, pluginId, settings);
+                                                  return excessivelyIndentedCollapsibleBlock(state, start, end, silent, pluginId, settings);
                                               },
                                               { alt: [ 'paragraph' ] });
             },
@@ -30,9 +32,9 @@ module.exports =  {
     }
 };
 
-// Nested collapsible blocks sometimes get swallowed by the paragraph rule
+// If collapsible blocks are being indented for formatting, they sometimes get swallowed by the paragraph rule
 // This simply runs before the paragraph rule to identify situations where we'd like the collapsible block rule to win instead
-function lastTryCollapsibleBlock(state, start, end, silent, pluginId, settings) {
+function excessivelyIndentedCollapsibleBlock(state, start, end, silent, pluginId, settings) {
     let nextLine = start + 1;
     let success = false;
     for (; nextLine < end && !state.isEmpty(nextLine); nextLine++) {
@@ -41,8 +43,12 @@ function lastTryCollapsibleBlock(state, start, end, silent, pluginId, settings) 
             break
         }
     }
-    if (!success) return false;
-    if (silent) return true;
+    if (!success) {
+        return false;
+    }
+    if (silent) {
+        return true;
+    }
     state.md.block.tokenize(state, start, nextLine);
     state.line = nextLine
     return collapsibleBlock(state, nextLine, end, false, pluginId, settings)
@@ -110,8 +116,8 @@ function collapsibleBlock(state, start, end, silent, pluginId, settings) {
                         // body will include all lines up to but not including the line with endToken
                         bodyEndLine = currentLine - 1;
                     }
-                    let content = state.src.slice(pos, max);
-                    if (content !== endToken & content !== endToken + endToken) {
+                    if (pos !== max - endToken.length &
+                        !(pos === max - 2*endToken.length && state.src.slice(pos, max) === endToken + endToken)) {
                         // There is body content on the same line as endToken - include it
                         bodyEndLine = currentLine;
                         lastLine = true;
@@ -191,7 +197,25 @@ function collapsibleBlock(state, start, end, silent, pluginId, settings) {
     state.push('summary_close', 'summary', -1);
     // Set the content
     if (bodyEndLine !== undefined) {
-        state.md.block.tokenize(state, start + 1, bodyEndLine + 1);
+        // Calculate the block indent as the smallest indent level present on any body line
+        let blkIndent = 99999;
+        for (let i = start + 1; i <= bodyEndLine; i++) {
+            if (state.sCount[i] >= blkIndent) {
+                continue;
+            }
+            if (state.isEmpty(i)) { // Ignore empty lines
+                continue;
+            }
+            blkIndent = state.sCount[i];
+        }
+        // Send the body to be tokenized, then restore the old value of state.blkIndent
+        const old_blkIndent = state.blkIndent;
+        try {
+            state.blkIndent = blkIndent
+            state.md.block.tokenize(state, start + 1, bodyEndLine + 1);
+        } finally {
+            state.blkIndent = old_blkIndent;
+        }
     }
     // This entire for loop just removes code blocks, which are sometimes created against my will while indenting
     for (let i = 1; state.tokens[state.tokens.length - i].type !== 'summary_close'; i++) {
@@ -230,7 +254,6 @@ function collapsibleBlock(state, start, end, silent, pluginId, settings) {
                 if (!noToggleFlag) {
                     token.content = token.content.slice(0, -endToken.length);
                 } else {
-                    // The end token was doubled - remove both of them
                     token.content = token.content.slice(0, -2*endToken.length);
                 }
                 break;

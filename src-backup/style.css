@@ -38,6 +38,13 @@ details.cb-details p {
     margin: 0;
 }
 
+/* Removes codeblock styling from collapsible sections of text in the editor */
+.cb.cm-codeBlock {
+    border: none;
+    background-color: transparent;
+    font: inherit;
+}
+
 /* Any styles to apply to all collapsible blocks in the webview */
 div.cb {
 
