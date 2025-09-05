@@ -1,42 +1,119 @@
-module.exports =  {
-    default: function(context) {
-        const pluginId = context.pluginId;
-        return {
-            plugin: async function(markdownIt, options) {
-                const settings = {
-                    doWebviewColors: options.settingValue('doWebviewColors'),
-                    startToken: options.settingValue('startToken'),
-                    endToken: options.settingValue('endToken'),
-                    rememberOpenOrClose: options.settingValue('rememberOpenOrClose')
-                };
-                markdownIt.block.ruler.before('code',
-                                              'collapsibleBlock',
+export default (context) => {
+    return {
+        plugin: async function(markdownIt, options) {
+            const headingRule = markdownIt.block.ruler.__rules__.find(r => r.name === 'heading')?.fn;
+            const settings = {
+                doWebviewColors: options.settingValue('doWebviewColors'),
+                startToken: options.settingValue('startToken'),
+                endToken: options.settingValue('endToken'),
+                rememberOpenOrClose: options.settingValue('rememberOpenOrClose'),
+                collapsibleHeaders: options.settingValue('collapsibleHeaders'),
+                darkMode: options.settingValue('darkMode'),
+                pluginId: context.pluginId,
+            };
+            // This one comes as a JSON.stringify string
+            settings['collapsibleList'] = JSON.parse(options.settingValue('collapsibleList'));
+            if (headingRule !== undefined) {
+                markdownIt.block.ruler.before('heading',
+                                              'collapsibleHeader',
                                               function (state, start, end, silent) {
-                                                  return collapsibleBlock(state, start, end, silent, pluginId, settings);
+                                                  return collapsibleHeader(state, start, end, silent, settings, headingRule);
                                               });
-                // When a valid collapsible block would otherwise get swallowed up by the
-                // paragraph rule, this stops it from being swallowed
-                markdownIt.block.ruler.before('code',
-                                              'lastTryCollapsibleBlock',
-                                              function (state, start, end, silent) {
-                                                  return lastTryCollapsibleBlock(state, start, end, silent, pluginId, settings);
-                                              },
-                                              { alt: [ 'paragraph' ] });
-            },
-            assets: () => {
-                return [ { name: 'style.css' } ];
             }
-        };
+            markdownIt.block.ruler.before('code',
+                                          'collapsibleBlock',
+                                          function (state, start, end, silent) {
+                                              return collapsibleBlock(state, start, end, silent, settings);
+                                          });
+            // When a valid collapsible block would otherwise get swallowed up by the
+            // paragraph rule, this stops it from being swallowed
+            markdownIt.block.ruler.before('paragraph',
+                                          'lastTryCollapsibleBlock',
+                                          function (state, start, end, silent) {
+                                              return lastTryCollapsibleBlock(state, start, end, silent, settings);
+                                          },
+                                          { alt: [ 'paragraph' ] });
+        },
+        assets: () => { return [ { name: 'style.css' } ]; }
+    };
+}
+
+
+function collapsibleHeader(state, start, end, silent, settings, headingRule) {
+    if (!settings.collapsibleHeaders) return false;
+    if (silent) return headingRule(state, start, end, true);
+    // Just hijack the heading rule
+    if (!headingRule(state, start, end, true)) return false;
+    // Below code replicates logic of markdown-It's built-in heading rule
+    // Basically a straight copy+paste of it, but with added lines for the details and summary tags
+    let pos = state.bMarks[start] + state.tShift[start];
+    let max = state.eMarks[start];
+    let line = state.src.slice(pos, max);
+    // count heading level
+    let level = 1;
+    let ch = state.src.charCodeAt(++pos);
+    while (ch === 0x23/* # */ && pos < max && level <= 6) {
+        level++;
+        ch = state.src.charCodeAt(++pos);
     }
-};
+    max = state.skipSpacesBack(max, pos);
+    const tmp = state.skipCharsBack(max, 0x23, pos); // #
+    if (tmp > pos &&
+            (state.src.charCodeAt(tmp - 1) === 0x09 /* Space */ ||
+             state.src.charCodeAt(tmp - 1) === 0x20 /* Tab */)) {
+        max = tmp;
+    }
+    let title = state.src.slice(pos, max).trim();
+
+    let token = state.push('details_open', 'details', 1);
+    token.attrs = [['class', 'cb-heading'],
+                   ['open', '']];
+    state.push('summary_open', 'summary', 1);
+
+    const token_o  = state.push('heading_open', 'h' + String(level), 1);
+    token_o.markup = '########'.slice(0, level);
+    token_o.map    = [start, state.line];
+
+    const token_i    = state.push('inline', '', 0);
+    token_i.content  = title;
+    token_i.map      = [start, state.line];
+    token_i.children = [];
+
+    const token_c  = state.push('heading_close', 'h' + String(level), -1);
+    token_c.markup = '########'.slice(0, level);
+
+    state.push('summary_close', 'summary', -1);
+
+    let nextLine = start + 1;
+    for (; nextLine < end; nextLine++) {
+        if (headingRule(state, nextLine, end, true)) {
+            let newPos = state.bMarks[nextLine] + state.tShift[nextLine];
+            let newMax = state.eMarks[nextLine];
+            let newLine = state.src.slice(newPos, newMax);
+            let newLevel = 1;
+            ch = state.src.charCodeAt(++newPos);
+            while (ch === 0x23/* # */ && newPos < newMax && newLevel <= 6) {
+                newLevel++;
+                ch = state.src.charCodeAt(++newPos);
+            }
+            if (newLevel <= level) {
+                break;
+            }
+        }
+    }
+    state.md.block.tokenize(state, start + 1, nextLine) // Includes start + 1, does not include nextLine
+    state.push('details_close', 'details', -1)
+    state.line = nextLine;
+    return true;
+}
 
 // Nested collapsible blocks sometimes get swallowed by the paragraph rule
 // This simply runs before the paragraph rule to identify situations where we'd like the collapsible block rule to win instead
-function lastTryCollapsibleBlock(state, start, end, silent, pluginId, settings) {
+function lastTryCollapsibleBlock(state, start, end, silent, settings) {
     let nextLine = start + 1;
     let success = false;
     for (; nextLine < end && !state.isEmpty(nextLine); nextLine++) {
-        if (collapsibleBlock(state, nextLine, end, true, pluginId, settings)) {
+        if (collapsibleBlock(state, nextLine, end, true, settings)) {
             success = true
             break
         }
@@ -45,17 +122,18 @@ function lastTryCollapsibleBlock(state, start, end, silent, pluginId, settings) 
     if (silent) return true;
     state.md.block.tokenize(state, start, nextLine);
     state.line = nextLine
-    return collapsibleBlock(state, nextLine, end, false, pluginId, settings)
+    return collapsibleBlock(state, nextLine, end, false, settings)
 }
+
 
 // These two used for tracking previously found collapsible blocks
 // for the purpose of determining nesting levels
 let foundBlocks = [];
 let lastStart = 0;
 // Tokenizing the collapsible blocks
-function collapsibleBlock(state, start, end, silent, pluginId, settings) {
-    const { startToken, endToken, doWebviewColors, rememberOpenOrClose } = settings;
-    if (startToken === undefined || endToken === undefined) {
+function collapsibleBlock(state, start, end, silent, settings) {
+    const { startToken, endToken, doWebviewColors, rememberOpenOrClose, darkMode, collapsibleList, pluginId } = settings;
+    if (startToken === undefined || endToken === undefined || collapsibleList === undefined) {
         return false
     }
     if (!silent) {
@@ -132,6 +210,22 @@ function collapsibleBlock(state, start, end, silent, pluginId, settings) {
     if (silent) {
         return true;
     }
+    let widget;
+    for (const wid of Object.values(collapsibleList)) {
+        if (wid.lineNum === start) {
+            widget = wid;
+            break;
+        }
+    }
+    if (widget === undefined) {
+        widget = {
+            id: Math.random().toString(36).slice(2),
+            lineNum: start,
+            isFolded: (title === undefined || !title.startsWith(startToken)),
+            doUpdate: (state.src.slice(state.eMarks[endLine] - 2 * endToken.length, state.eMarks[endLine]) !== endToken + endToken),
+            webviewFolded: (title === undefined || !title.startsWith(startToken)),
+        };
+    }
     // Add to foundBlocks, calculate nesting level
     foundBlocks.push([start, endLine]);
     let nestingLevel = 0;
@@ -156,24 +250,33 @@ function collapsibleBlock(state, start, end, silent, pluginId, settings) {
         // But I use it in the ontoggle call to only postMessage when it's actually relevant
         openFlag = [ 'closed', '' ];
     }
+    if (widget.webviewFolded) {
+        openFlag = [ 'closed', '' ];
+    } else {
+        openFlag = [ 'open', '' ];
+    }
     // noToggleFlag determines if opening or closing the block will save its state
     let noToggleFlag = false;
-    if (state.src.slice(state.eMarks[endLine] - 2*endToken.length, state.eMarks[endLine]) === endToken + endToken) {
+    if (state.src.slice(state.eMarks[endLine] - 2 * endToken.length, state.eMarks[endLine]) === endToken + endToken) {
         noToggleFlag = true;
     }
     let token;
     token = state.push('details_open', 'details', 1);
-    let classes;
-    if (doWebviewColors) {
-        classes = `cb-details cb-nest-${nestingLevel}`;
-    } else {
-        classes = 'cb-details';
-    }
-    if (rememberOpenOrClose && !noToggleFlag) {
+    let classes = 'cb-details';
+    if (darkMode) classes += ' cb-dark';
+    else classes += ' cb-light';
+    if (doWebviewColors) classes += ` cb-nest-${nestingLevel}`;
+    if (true) {//(rememberOpenOrClose && !noToggleFlag) {
         // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed
         token.attrs = [[ 'class', classes ],
                        [ 'ontoggle',   `if ((this.open !== !this.hasAttribute('closed')) || this.hasAttribute('debounce')) {
-                                            webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle', data: { isOpen: this.open, lineNum: ${state.line} } });
+                                            webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle',
+                                                                                    data: { isFolded: !this.open,
+                                                                                            lineNum: ${state.line},
+                                                                                            id: '${widget.id}',
+                                                                                          }
+                                                                                  }
+                                            );
                                             this.setAttribute('debounce', '');
                                         }` ],
                        openFlag];

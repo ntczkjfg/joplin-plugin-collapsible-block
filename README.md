@@ -15,8 +15,8 @@ Although the blocks this plugin creates are only collapsible in the webview, not
 ### Uninstall
 
 - Open Joplin and navigate to `Tools > Options > Plugins`
-- Search for `Collapsible block` plugin
-- Press `Delete` to remove the plugin or `Disable` to disable it
+- Find the `Collapsible blocks` plugin
+- Press `Delete` to remove the plugin, or click the toggle to disable it
 - Restart Joplin
 
 ## Usage
@@ -45,9 +45,17 @@ Nothing but whitespace may come before the `:{`. The title of the block must alw
 :{
 }:
 
+:{
+
+}:
+
 :{Title}:
 
 :{Title
+}:
+
+:{Title
+
 }:
 
 :{
@@ -55,10 +63,6 @@ Body}:
 
 :{
 Body
-}:
-
-:{
-    Body
 }:
 
 :{Title
@@ -141,9 +145,9 @@ If the collapsible block is not showing up, or is showing up but you're unable t
 
 ![](screenshots/troubleshooting.png)
 
-## Notes
+## Issues
 
-- **There might be bugs**, [report them here](https://github.com/ntczkjfg/joplin-plugin-collapsible-block/issues) and I'll try to fix them if I can.
+- **Encounter any bugs?** [Report them here](https://github.com/ntczkjfg/joplin-plugin-collapsible-block/issues), and I'll do my best to fix them.
 
 ## Acknowledgement
 
@@ -151,4 +155,6 @@ Thanks to the creator of the [Joplin Spoilers](https://github.com/martinkorelic/
 
 ## Other plugins
 
-See my other plugin, [Click-to-Copy Spans](https://github.com/ntczkjfg/joplin-plugin-click-to-copy-span)! Easily lets you create spans of text that, when clicked, are automatically copied to your clipboard for fast and easy pasting. 
+Check out my other plugins:
+* [Click-to-Copy Spans](https://github.com/ntczkjfg/joplin-plugin-click-to-copy-span)! Easily create spans of text that, when clicked, are automatically copied to your clipboard for fast and easy pasting. 
+* [Hotstrings & Hotkeys]()https://github.com/ntczkjfg/joplin-plugin-hotstrings)! Easily create user-defined hotstrings and hotkeys for simple text insertion and replacement. 

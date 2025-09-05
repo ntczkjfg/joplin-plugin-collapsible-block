@@ -2,12 +2,8 @@ import joplin from 'api';
 import { ContentScriptType, ToolbarButtonLocation, SettingItemType } from 'api/types';
 
 // Modifies the editor whenever a block is opened or closed
-async function openOrCloseBlock(closedToken: string, lineNum, isOpen, noteId, isMobile) {
-    const note = await joplin.workspace.selectedNote();
+async function openOrCloseBlock(closedToken: string, lineNum, isFolded, note, isMobile) {
     const openedToken = closedToken + closedToken;
-
-    if (noteId !== note.id) return;
-
     // The relevant line from the editor
     let line: string;
     let lines: string[];
@@ -22,7 +18,6 @@ async function openOrCloseBlock(closedToken: string, lineNum, isOpen, noteId, is
     } else {
     	line = await joplin.commands.execute('editor.execCommand', { name: 'getLine', args: [lineNum] });
     }
-
     // It should be guaranteed that the line starts with our token, possibly after whitespace
     // Calculate its actual start position - quit if for some reason it's not there
     const startPos = line.indexOf(closedToken);
@@ -32,15 +27,15 @@ async function openOrCloseBlock(closedToken: string, lineNum, isOpen, noteId, is
 
     const startsWithOpenToken = line.slice(startPos, startPos + openedToken.length) === openedToken;
 
-    if (isOpen) {
+    if (isFolded) {
+    	// Make it closedToken if it's openedToken
+        if (startsWithOpenToken) {
+            newLine = line.replace(openedToken, closedToken);
+        }
+    } else {
         // Make it openedToken if not already
         if (!startsWithOpenToken) {
             newLine = line.replace(closedToken, openedToken);
-        }
-    } else {
-        // Make it closedToken if it's openedToken
-        if (startsWithOpenToken) {
-            newLine = line.replace(openedToken, closedToken);
         }
     }
 
@@ -52,7 +47,7 @@ async function openOrCloseBlock(closedToken: string, lineNum, isOpen, noteId, is
     	} else {
     		await joplin.commands.execute('editor.execCommand',
         							      { name: 'replaceRange',
-								   	        args: [newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: line.length }]});
+								   	        args: [newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: line.length } ] });
     	}
     }
 }
@@ -66,80 +61,138 @@ joplin.plugins.register({
 		    iconName: 'fas fa-angle-right'
 		});
 		const isMobile = (await joplin.versionInfo()).platform === 'mobile';
+		const darkMode = await joplin.shouldUseDarkColors();
 		await joplin.settings.registerSettings({
 		    doEditorColors: {
-		        value: true,
-		        type: SettingItemType.Bool,
 		        section: 'collapsibleBlocks',
-		        public: true,
-		        label: 'Do Editor Colors',
-		        description: 'Color collapsible block text in the editor. If blocks are nested, each nesting layer is a different color. '
+		    	public: true,
+		        type: SettingItemType.Bool,
+		        value: true,
+		        label: 'Color blocks in the editor',
+		        description: 'Color collapsible block text in the editor. If blocks are nested, each nesting layer is a different color.',
 		    },
 		    doWebviewColors: {
-		    	value: false,
-		        type: SettingItemType.Bool,
 		        section: 'collapsibleBlocks',
-		        public: true,
-		        label: 'Do Webview Colors',
-		        description: `Change the color of the border of blocks in the webview, to match the text color of the text that made that block
-		         in the editor, if the above option is enabled. Useful when making edits to heavily nested groups of blocks. `
+		    	public: true,
+		        type: SettingItemType.Bool,
+		    	value: false,
+		        label: 'Color blocks in the webview',
+		        description: `Color the border of collapsible blocks in the webview to match the editor’s text color, if editor colors are enabled. 
+		        Useful when making edits to heavily nested groups of blocks.`,
 		    },
 		    startToken: {
-		        value: ':{', // Default start token
-		        type: SettingItemType.String,
 		        section: 'collapsibleBlocks',
-		        public: true,
-		        label: 'Start Token'
+		    	public: true,
+		        type: SettingItemType.String,
+		        value: ':{', // Default start token
+		        label: 'Start Token',
 		    },
 		    endToken: {
-		        value: '}:', // Default end token
-		        type: SettingItemType.String,
 		        section: 'collapsibleBlocks',
-		        public: true,
-		        label: 'End Token'
+		    	public: true,
+		        type: SettingItemType.String,
+		        value: '}:', // Default end token
+		        label: 'End Token',
 		    },
 		    rememberOpenOrClose: {
-		    	value: true,
-		    	type: SettingItemType.Bool,
-		    	section: 'collapsibleBlocks',
+		        section: 'collapsibleBlocks',
 		    	public: true,
-		    	label: 'Remember when a collapsible block is left opened or closed in the webview',
+		    	type: SettingItemType.Bool,
+		    	value: true,
+		    	label: 'Remember when collapsible blocks are left opened or closed in the webview',
 		    	description: `If disabled, opening or closing collapsible blocks in the webview will 
 		    	not change their state in the editor, which will cause them to always display as opened 
 		    	or closed, depending on their state in the editor, when a note is reloaded. You can also
-		    	 do this on a case-by-case basis by doubling the end token for a given block. `
+		    	 do this on a case-by-case basis by doubling the end token for a given block.`,
 		    },
 		    indentLevel: {
-		    	value: 15,
+		        section: 'collapsibleBlocks',
+		    	public: true,
 		    	type: SettingItemType.Int,
+		    	value: 15,
 		    	minimum: 0,
 		    	maximum: 100,
 		    	step: 1,
-		    	section: 'collapsibleBlocks',
-		    	public: true,
 		    	label: 'Editor Block indentation level',
-		    	description: 'How much to visually indent block sections in the editor (0 for none). Unitless, but 10 is roughly equivalent to one tab.'
+		    	description: 'How much to visually indent block sections in the editor (0 for none). Unitless, but 10 is roughly equivalent to one tab.',
 		    },
 		    maxIndentLevel: {
-		    	value: 8,
+		        section: 'collapsibleBlocks',
+		    	public: true,
 		    	type: SettingItemType.Int,
+		    	value: 8,
 		    	minimum: 0,
 		    	maximum: 100,
 		    	step: 1,
+		    	label: '',
+		    	description: 'How many nested layers of collapsible blocks to apply the above indentation level to, before maxing out.',
+		    },
+		    collapsibleHeaders: {
 		    	section: 'collapsibleBlocks',
 		    	public: true,
-		    	label: '',
-		    	description: 'How many nested layers of blocks to apply the above indentation level to, before maxing out.'
+		    	type: SettingItemType.Bool,
+		    	value: true,
+		    	label: 'Enable header-based collapsing.',
+		    },
+		    collapsibleInEditor: {
+		    	section: 'collapsibleBlocks',
+		    	public: true,
+		    	type: SettingItemType.Bool,
+		    	value: true,
+		    	label: 'Allow collapsing blocks within the markdown editor as well.',
+		    	description: 'The below options won\'t do anything if this isn\'t checked',
+		    },
+		    matchEditorToWebview: {
+		        section: 'collapsibleBlocks',
+		    	public: true,
+		    	type: SettingItemType.Bool,
+		    	value: true,
+		    	label: 'Match editor folding to webview folding on initial note load',
+		    	description: `When enabled, block folding states in the editor will mirror the webview's 
+		    	block folding states when a note is first opened. When disabled, all collapsible sections in the editor
+		    	will initially be opened.`,
+		    },
+		    lockEditorAndWebview: {
+		    	section: 'collapsibleBlocks',
+		    	public: true,
+		    	type: SettingItemType.Bool,
+		    	value: true,
+		    	label: 'Keep editor and webview folding in sync',
+		    	description: `When a collapsible section is opened or closed in either the editor or webview, 
+		    	the corresponding section in the other view will update automatically.`,
 		    },
 		    isMobile: {
-		    	value: isMobile,
+		        section: 'collapsibleBlocks',
+		    	public: false,
 		    	type: SettingItemType.Bool,
+		    	value: isMobile,
+		    	label: 'isMobile',
+		    },
+		    darkMode: {
 		    	section: 'collapsibleBlocks',
 		    	public: false,
-		    	label: 'isMobile'
+		    	type: SettingItemType.Bool,
+		    	value: darkMode,
+		    	label: 'darkMode',
+		    },
+		    collapsibleList: {
+		    	section: 'collapsibleBlocks',
+		    	public: false,
+		    	type: SettingItemType.String,
+		    	value: '{}',
+		    	label: 'collapsibleList'
 		    }
 		});
-
+		joplin.settings.setValue('collapsibleList', '{}')
+		let collapsibleList = {};
+		await joplin.workspace.onNoteSelectionChange(async (event) => {
+			// Detects when the note is changed
+			// editor script also does this, but doing it here too lets
+			// the editor avoid an async call and sends the blank list to
+			// the webview script faster
+			collapsibleList = {};
+		    await joplin.settings.setValue('collapsibleList', '{}');
+		});
 		// Create a toolbar button
 		await joplin.commands.register({
 			name: 'insertCollapsibleBlock',
@@ -186,21 +239,31 @@ joplin.plugins.register({
 		// When a collapsible section is opened or closed, it sends a message here
 	    // This then calls a function to modify the editor to save that change
 		await joplin.contentScripts.onMessage(webScriptId, async (message: { name: string, data: { [key: string]: any } }) => {
-			const startToken = await joplin.settings.value('startToken');
+			let startToken;
+			const isMobile = await joplin.settings.value('isMobile');
 			switch (message.name) {
 				case 'collapsibleToggle':
-					const note = await joplin.workspace.selectedNote();
-					const noteId = note?.id;
-					if (!noteId) {
-						return;
+					const { id, isFolded, lineNum } = message.data;
+					if (id in collapsibleList) {
+						if (await joplin.settings.value('lockEditorAndWebview')) {
+							collapsibleList[id].isFolded = isFolded;
+						}
+						collapsibleList[id].webviewFolded = isFolded;
+					} else {
+						for (const widget of Object.values(collapsibleList)) {
+							if (widget['lineNum'] === lineNum) {
+								if (await joplin.settings.value('lockEditorAndWebview')) {
+									widget['isFolded'] = isFolded;
+								}
+								widget['webviewFolded'] = isFolded;
+								break;
+							}
+						}
 					}
-					const lineNum = message.data.lineNum;
-					const isOpen = message.data.isOpen;
-					const isMobile = await joplin.settings.value('isMobile');
-					await openOrCloseBlock(startToken, lineNum, isOpen, noteId, isMobile);
-					break;
-				case 'getSetting':
-					return await joplin.settings.value(message.data.setting);
+					joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
+					await joplin.commands.execute('editor.execCommand',
+        							      { name: 'replaceRange',
+								   	        args: ['', { line: 0, ch: 0 }, { line: 0, ch: 0 }] });
 					break;
 				default:
 					break;
@@ -217,20 +280,52 @@ joplin.plugins.register({
         );
 		// The editor script sends a message here to receive settings
 		await joplin.contentScripts.onMessage(editorScriptId, async (message: { name: string, data: { [key: string]: any } }) => {
+			const isMobile = await joplin.settings.value('isMobile');
 			switch (message.name) {
 				case 'getSetting':
 					return await joplin.settings.value(message.data.setting);
 					break;
 				case 'getSettings':
-					const [doEditorColors, startToken, endToken, indentLevel, maxIndentLevel] = await Promise.all([
+					const [doEditorColors, startToken, endToken,
+							indentLevel, maxIndentLevel, collapsibleInEditor,
+							matchEditorToWebview, lockEditorAndWebview, darkMode] = await Promise.all([
 				        joplin.settings.value('doEditorColors'),
 				        joplin.settings.value('startToken'),
 				        joplin.settings.value('endToken'),
 				        joplin.settings.value('indentLevel'),
-				        joplin.settings.value('maxIndentLevel')
+				        joplin.settings.value('maxIndentLevel'),
+				        joplin.settings.value('collapsibleInEditor'),
+				        joplin.settings.value('matchEditorToWebview'),
+				        joplin.settings.value('lockEditorAndWebview'),
+				        joplin.settings.value('darkMode'),
 				    ]);
-				    const settings = { doEditorColors, startToken, endToken, indentLevel, maxIndentLevel };
+				    const settings = { doEditorColors, startToken, endToken, indentLevel, maxIndentLevel,
+				    	collapsibleInEditor, matchEditorToWebview, lockEditorAndWebview, darkMode };
 				    return settings;
+					break;
+				case 'getList':
+					return collapsibleList;
+				case 'setList':
+					collapsibleList = message.data['collapsibleList'];
+					joplin.settings.setValue('collapsibleList', JSON.stringify(message.data['collapsibleList']));
+					break;
+				case 'toggleById':
+					collapsibleList[message.data.id].isFolded = message.data.isFolded;
+					if (await joplin.settings.value('lockEditorAndWebview')) {
+						collapsibleList[message.data.id].webviewFolded = message.data.isFolded;
+					}
+					joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
+					break;
+				case 'collapsibleToggle':
+					const { id, isFolded } = message.data;
+					collapsibleList[id].isFolded = isFolded;
+					if (await joplin.settings.value('lockEditorAndWebview')) {
+						collapsibleList[id]['webviewFolded'] = isFolded;
+						await joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
+					}
+					await joplin.commands.execute('editor.execCommand',
+        							      { name: 'replaceRange',
+								   	        args: ['', { line: 0, ch: 0 }, { line: 0, ch: 0 }] });
 					break;
 				default:
 					break;
