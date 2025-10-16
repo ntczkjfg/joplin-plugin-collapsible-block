@@ -8,7 +8,7 @@ export default (context) => {
             const settings = await context.postMessage({ name: 'getSettings', data: {} });
             const { doEditorColors, startToken, endToken, indentLevel,
                 maxIndentLevel, collapsibleInEditor, matchEditorToWebview,
-                lockEditorAndWebview, darkMode } = settings;
+                lockEditorAndWebview, darkMode, rememberOpenOrClose } = settings;
             // Add codeFolding (with no placeholder) and our foldPlugin
             CodeMirror.addExtension(codeFolding({
                 placeholderDOM: () => document.createElement('span')
@@ -181,14 +181,13 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
 
         toggleWidget(view, foldWidget) {
             let effects = { effects: [], changes: [] };
-            if (!settings.collapsibleInEditor) return effects;
             const { startToken } = settings;
 
             const line = view.state.doc.lineAt(foldWidget.startFrom);
             const lineText = line.text.replace(/^[ \t]+/, "");
             let foldFrom = foldWidget.foldFrom;
             let foldTo = foldWidget.foldTo;
-            if (foldWidget.doUpdate && settings.lockEditorAndWebview) {
+            if (foldWidget.doUpdate && (settings.lockEditorAndWebview || settings.rememberOpenOrClose)) {
                 const from = line.from + line.text.indexOf(startToken);
                 if (foldWidget.isFolded) {
                     if (!lineText.startsWith(startToken + startToken)) {
@@ -212,23 +211,25 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     }
                 }
             }
-            if (foldWidget.isFolded) {
-                effects.effects = [
-                    unfoldEffect.of({
-                        from: foldFrom,
-                        to: foldTo,
-                    })
-                ];
-            } else {
-                effects.effects = [
-                    foldEffect.of({
-                        from: foldFrom,
-                        to: foldTo,
-                    })
-                ];
+            if (settings.collapsibleInEditor) {
+                if (foldWidget.isFolded) {
+                    effects.effects = [
+                        unfoldEffect.of({
+                            from: foldFrom,
+                            to: foldTo,
+                        })
+                    ];
+                } else {
+                    effects.effects = [
+                        foldEffect.of({
+                            from: foldFrom,
+                            to: foldTo,
+                        })
+                    ];
+                }
             }
             foldWidget.isFolded = !foldWidget.isFolded;
-            foldWidget.span.textContent = foldWidget.isFolded ? ' ▶ ' : ' ▼ ';
+            if (foldWidget.span) foldWidget.span.textContent = foldWidget.isFolded ? ' ▶ ' : ' ▼ ';
             return effects;
         }
 
@@ -290,14 +291,20 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
             for (const region of regions) {
                 // Determine if this region is folded or unfolded in the editor
                 let isFolded = false;
-                // Will iterate over all folded regions in the editor which intersect the interval [region.foldFrom, region.foldTo]
-                // Exits iteration early if false returned
-                folded.between(region.foldFrom, region.foldTo, (foldedFrom, foldedTo, foldedValue) => {
-                    if (foldedFrom === region.foldFrom && foldedTo === region.foldTo) {
-                        isFolded = true;
-                        return false;
-                    }
-                });
+                if (settings.collapsibleInEditor) {
+                    // Will iterate over all folded regions in the editor which intersect the interval [region.foldFrom, region.foldTo]
+                    // Exits iteration early if false returned
+                    folded.between(region.foldFrom, region.foldTo, (foldedFrom, foldedTo, foldedValue) => {
+                        if (foldedFrom === region.foldFrom && foldedTo === region.foldTo) {
+                            isFolded = true;
+                            return false;
+                        }
+                    });
+                } else {
+                    const line = view.state.doc.lineAt(region.startFrom);
+                    const lineText = line.text.replace(/^[ \t]+/, "");
+                    isFolded = !lineText.startsWith(settings.startToken + settings.startToken);
+                }
 
                 let widget;
                 for (const foldWidget of Object.values(this.foldWidgets)) {
@@ -344,7 +351,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 builder.push(deco);
             }
             postMessage({ name: 'setList', data: { collapsibleList: this.collapsibleList } });
-            if (settings.collapsibleInEditor) this.updateFoldWidgets(view);
+            if (settings.collapsibleInEditor || settings.rememberOpenOrClose) this.updateFoldWidgets(view);
             if (effects) setTimeout(() => {view.dispatch({ effects: effects });}, 0);
             return Decoration.set(builder, true);
         }

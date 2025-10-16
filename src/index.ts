@@ -1,57 +1,6 @@
 import joplin from 'api';
 import { ContentScriptType, ToolbarButtonLocation, SettingItemType } from 'api/types';
 
-// Modifies the editor whenever a block is opened or closed
-async function openOrCloseBlock(closedToken: string, lineNum, isFolded, note, isMobile) {
-    const openedToken = closedToken + closedToken;
-    // The relevant line from the editor
-    let line: string;
-    let lines: string[];
-    if (isMobile) {
-    	// The Desktop method is better, in that it only modifies the relevant line, and preserves scroll position on desktop
-    	// However, it simply does not work on mobile
-    	// This method works fine on both, but is inferior on Desktop
-    	// So, we do whichever is most appropriate based on the platform - same below, at the end of this function
-    	lines = note.body.split('\n');
-    	if (lineNum < 0 || lineNum >= lines.length) return;
-    	line = lines[lineNum];
-    } else {
-    	line = await joplin.commands.execute('editor.execCommand', { name: 'getLine', args: [lineNum] });
-    }
-    // It should be guaranteed that the line starts with our token, possibly after whitespace
-    // Calculate its actual start position - quit if for some reason it's not there
-    const startPos = line.indexOf(closedToken);
-    if (startPos === -1) return;
-
-    let newLine = line;
-
-    const startsWithOpenToken = line.slice(startPos, startPos + openedToken.length) === openedToken;
-
-    if (isFolded) {
-    	// Make it closedToken if it's openedToken
-        if (startsWithOpenToken) {
-            newLine = line.replace(openedToken, closedToken);
-        }
-    } else {
-        // Make it openedToken if not already
-        if (!startsWithOpenToken) {
-            newLine = line.replace(closedToken, openedToken);
-        }
-    }
-
-    // Only bother updating the editor if we changed something
-    if (newLine !== line) {
-    	if (isMobile) {
-    		lines[lineNum] = newLine;
-    		await joplin.data.put(['notes', note.id], null, { body : lines.join('\n') });
-    	} else {
-    		await joplin.commands.execute('editor.execCommand',
-        							      { name: 'replaceRange',
-								   	        args: [newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: line.length } ] });
-    	}
-    }
-}
-
 joplin.plugins.register({
 	onStart: async function() {
 		// Create the settings page
@@ -114,7 +63,7 @@ joplin.plugins.register({
 		    	maximum: 100,
 		    	step: 1,
 		    	label: 'Editor Block indentation level',
-		    	description: 'How much to visually indent block sections in the editor (0 for none). Unitless, but 10 is roughly equivalent to one tab.',
+		    	description: 'How much to visually indent collapsible section bodies in the editor (0 for none). Unitless, but 10 is roughly equivalent to one tab.',
 		    },
 		    maxIndentLevel: {
 		        section: 'collapsibleBlocks',
@@ -240,12 +189,11 @@ joplin.plugins.register({
 	    // This then calls a function to modify the editor to save that change
 		await joplin.contentScripts.onMessage(webScriptId, async (message: { name: string, data: { [key: string]: any } }) => {
 			let startToken;
-			const isMobile = await joplin.settings.value('isMobile');
 			switch (message.name) {
 				case 'collapsibleToggle':
 					const { id, isFolded, lineNum } = message.data;
 					if (id in collapsibleList) {
-						if (await joplin.settings.value('lockEditorAndWebview')) {
+						if (await joplin.settings.value('lockEditorAndWebview') || await joplin.settings.value('rememberOpenOrClose')) {
 							collapsibleList[id].isFolded = isFolded;
 						}
 						collapsibleList[id].webviewFolded = isFolded;
@@ -261,6 +209,8 @@ joplin.plugins.register({
 						}
 					}
 					joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
+					// Forces the editor to update even though nothing changed
+					// Moreso, does so in a way we can detect
 					await joplin.commands.execute('editor.execCommand',
         							      { name: 'replaceRange',
 								   	        args: ['', { line: 0, ch: 0 }, { line: 0, ch: 0 }] });
@@ -280,7 +230,6 @@ joplin.plugins.register({
         );
 		// The editor script sends a message here to receive settings
 		await joplin.contentScripts.onMessage(editorScriptId, async (message: { name: string, data: { [key: string]: any } }) => {
-			const isMobile = await joplin.settings.value('isMobile');
 			switch (message.name) {
 				case 'getSetting':
 					return await joplin.settings.value(message.data.setting);
@@ -288,7 +237,7 @@ joplin.plugins.register({
 				case 'getSettings':
 					const [doEditorColors, startToken, endToken,
 							indentLevel, maxIndentLevel, collapsibleInEditor,
-							matchEditorToWebview, lockEditorAndWebview, darkMode] = await Promise.all([
+							matchEditorToWebview, lockEditorAndWebview, darkMode, rememberOpenOrClose] = await Promise.all([
 				        joplin.settings.value('doEditorColors'),
 				        joplin.settings.value('startToken'),
 				        joplin.settings.value('endToken'),
@@ -298,9 +247,10 @@ joplin.plugins.register({
 				        joplin.settings.value('matchEditorToWebview'),
 				        joplin.settings.value('lockEditorAndWebview'),
 				        joplin.settings.value('darkMode'),
+				        joplin.settings.value('rememberOpenOrClose'),
 				    ]);
 				    const settings = { doEditorColors, startToken, endToken, indentLevel, maxIndentLevel,
-				    	collapsibleInEditor, matchEditorToWebview, lockEditorAndWebview, darkMode };
+				    	collapsibleInEditor, matchEditorToWebview, lockEditorAndWebview, darkMode, rememberOpenOrClose };
 				    return settings;
 					break;
 				case 'getList':

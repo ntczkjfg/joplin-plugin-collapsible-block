@@ -4,7 +4,7 @@ This Joplin plugin allows you to create collapsible blocks with a title and exte
 
 Although the blocks this plugin creates are only collapsible in the webview, not the editor, it seems to pair well with the "Extra Markdown Editor Settings" plugin, which does allow for collapsing text in the editor, if "Enable code folding" is enabled in its settings. The collapsible blocks made by this plugin are detected by it as code, and are editor-foldable. If you're nesting collapsible blocks, only the outermost one (in the editor) will be foldable with this method. 
 
-**Version**: 1.2.0
+**Version**: 1.9.0
 
 ### Installation
 

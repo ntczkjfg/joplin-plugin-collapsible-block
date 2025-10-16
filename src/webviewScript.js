@@ -266,24 +266,19 @@ function collapsibleBlock(state, start, end, silent, settings) {
     if (darkMode) classes += ' cb-dark';
     else classes += ' cb-light';
     if (doWebviewColors) classes += ` cb-nest-${nestingLevel}`;
-    if (true) {//(rememberOpenOrClose && !noToggleFlag) {
-        // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed
-        token.attrs = [[ 'class', classes ],
-                       [ 'ontoggle',   `if ((this.open !== !this.hasAttribute('closed')) || this.hasAttribute('debounce')) {
-                                            webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle',
-                                                                                    data: { isFolded: !this.open,
-                                                                                            lineNum: ${state.line},
-                                                                                            id: '${widget.id}',
-                                                                                          }
-                                                                                  }
-                                            );
-                                            this.setAttribute('debounce', '');
-                                        }` ],
-                       openFlag];
-    } else {
-        token.attrs = [[ 'class', classes ],
-                       openFlag];
-    }
+    // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed
+    token.attrs = [[ 'class', classes ],
+                   [ 'ontoggle',   `if ((this.open !== !this.hasAttribute('closed')) || this.hasAttribute('debounce')) {
+                                        webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle',
+                                                                                data: { isFolded: !this.open,
+                                                                                        lineNum: ${state.line},
+                                                                                        id: '${widget.id}',
+                                                                                      }
+                                                                              }
+                                        );
+                                        this.setAttribute('debounce', '');
+                                    }` ],
+                   openFlag];
     state.push('summary_open', 'summary', 1);
     // Set the summary
     if (title !== undefined) {
