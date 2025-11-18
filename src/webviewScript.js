@@ -1,7 +1,6 @@
 export default (context) => {
     return {
         plugin: async function(markdownIt, options) {
-            const headingRule = markdownIt.block.ruler.__rules__.find(r => r.name === 'heading')?.fn;
             const settings = {
                 doWebviewColors: options.settingValue('doWebviewColors'),
                 startToken: options.settingValue('startToken'),
@@ -13,34 +12,32 @@ export default (context) => {
             };
             // This one comes as a JSON.stringify string
             settings['collapsibleList'] = JSON.parse(options.settingValue('collapsibleList'));
-            if (headingRule !== undefined) {
-                markdownIt.block.ruler.before('heading',
-                                              'collapsibleHeader',
-                                              function (state, start, end, silent) {
-                                                  return collapsibleHeader(state, start, end, silent, settings, headingRule);
-                                              });
+
+            const headingRuleObj = markdownIt.block.ruler.__rules__.find(r => r.name === 'heading');
+            //for (const rule of markdownIt.block.ruler.__rules__) console.error(rule.name);
+            let headingRule = headingRuleObj?.fn;
+            if (headingRule !== undefined && settings.collapsibleHeaders) {
+                // Replace the built-in heading rule with our rule that does the same thing but makes them collapsible
+                function collapsibleHeaderWrapper(state, start, end, silent) {
+                    return collapsibleHeader(state, start, end, silent, settings, headingRule);
+                }
+                markdownIt.block.ruler.at('heading',
+                                          collapsibleHeaderWrapper,
+                                          { alt: ['paragraph', 'reference', 'blockquote'] });
+            }
+            function collapsibleBlockWrapper(state, start, end, silent) {
+                 return collapsibleBlock(state, start, end, silent, settings);
             }
             markdownIt.block.ruler.before('code',
                                           'collapsibleBlock',
-                                          function (state, start, end, silent) {
-                                              return collapsibleBlock(state, start, end, silent, settings);
-                                          });
-            // When a valid collapsible block would otherwise get swallowed up by the
-            // paragraph rule, this stops it from being swallowed
-            markdownIt.block.ruler.before('paragraph',
-                                          'lastTryCollapsibleBlock',
-                                          function (state, start, end, silent) {
-                                              return lastTryCollapsibleBlock(state, start, end, silent, settings);
-                                          },
-                                          { alt: [ 'paragraph' ] });
+                                          collapsibleBlockWrapper,
+                                          { alt: ['paragraph', 'reference', 'blockquote'] });
         },
         assets: () => { return [ { name: 'style.css' } ]; }
     };
 }
 
-
 function collapsibleHeader(state, start, end, silent, settings, headingRule) {
-    if (!settings.collapsibleHeaders) return false;
     if (silent) return headingRule(state, start, end, true);
     // Just hijack the heading rule
     if (!headingRule(state, start, end, true)) return false;
@@ -85,7 +82,33 @@ function collapsibleHeader(state, start, end, silent, settings, headingRule) {
     state.push('summary_close', 'summary', -1);
 
     let nextLine = start + 1;
+    let inFence = false;
+    let fenceChar = '';
+    let fenceLength = 0;
     for (; nextLine < end; nextLine++) {
+        let lineStart = state.bMarks[nextLine] + state.tShift[nextLine];
+        let lineEnd = state.eMarks[nextLine];
+        let line = state.src.slice(lineStart, lineEnd);
+
+        // Check for fence start
+        if (!inFence) {
+            let match = line.match(/^ {0,3}([`~]{3,})/);
+            if (match) {
+                inFence = true;
+                fenceChar = match[1][0]; // ` or ~
+                fenceLength = match[1].length;
+                continue;
+            }
+        } else {
+            // Inside a fence, check for fence end
+            let match = line.match(new RegExp(`^ {0,3}${fenceChar}{${fenceLength},}$`));
+            if (match) {
+                inFence = false;
+                fenceChar = '';
+                fenceLength = 0;
+            }
+            continue; // skip heading checks inside a fence
+        }
         if (headingRule(state, nextLine, end, true)) {
             let newPos = state.bMarks[nextLine] + state.tShift[nextLine];
             let newMax = state.eMarks[nextLine];
@@ -106,25 +129,6 @@ function collapsibleHeader(state, start, end, silent, settings, headingRule) {
     state.line = nextLine;
     return true;
 }
-
-// Nested collapsible blocks sometimes get swallowed by the paragraph rule
-// This simply runs before the paragraph rule to identify situations where we'd like the collapsible block rule to win instead
-function lastTryCollapsibleBlock(state, start, end, silent, settings) {
-    let nextLine = start + 1;
-    let success = false;
-    for (; nextLine < end && !state.isEmpty(nextLine); nextLine++) {
-        if (collapsibleBlock(state, nextLine, end, true, settings)) {
-            success = true
-            break
-        }
-    }
-    if (!success) return false;
-    if (silent) return true;
-    state.md.block.tokenize(state, start, nextLine);
-    state.line = nextLine
-    return collapsibleBlock(state, nextLine, end, false, settings)
-}
-
 
 // These two used for tracking previously found collapsible blocks
 // for the purpose of determining nesting levels

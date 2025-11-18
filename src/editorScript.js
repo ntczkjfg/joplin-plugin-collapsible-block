@@ -366,7 +366,40 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 docLines.push(line)
             }
             const regions = [];
+            let inCodeBlock = false;
+            let codeBlockChar = '';
+            let codeBlockLen = 0;
+            const headings = [];
             for (let i = 1; i < docLines.length; i++) { // docLines indexes from 1
+                if (!inCodeBlock) {
+                    let match = docLines[i].match(/^ {0,3}([`~]{3,})/);
+                    if (match) {
+                        inCodeBlock = true;
+                        codeBlockChar = match[1][0];
+                        codeBlockLen = match[1].length;
+                        continue;
+                    }
+                } else {
+                    let match = docLines[i].match(new RegExp(`^ {0,3}${codeBlockChar}{${codeBlockLen},}$`));
+                    if (match) {
+                        inCodeBlock = false;
+                        codeBlockChar = '';
+                        codeBlockLen = 0;
+                    }
+                    continue;
+                }
+
+                let match = docLines[i].match(/^ {0,3}(#{1,6})([ \t](.*?)$|$)/);
+                if (match) {
+                    const heading = {
+                        line: i,
+                        order: match[1].length,
+                        from: doc.line(i).from,
+                        to: doc.line(i).to,
+                    };
+                    headings.push(heading);
+                }
+                
                 if (!docLines[i].startsWith(startToken)) {
                     // Not the start of a block, make no changes to levels
                     continue;
@@ -406,6 +439,31 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                         lineNum: i - 1,
                     });
                 }
+            }
+            for (const heading of headings) {
+                const region = {
+                    isFolded: false,
+                    startFrom: heading.from,
+                    startTo: heading.to,
+                    foldFrom: heading.to,
+                    doUpdate: false,
+                    lineNum: heading.line,
+                };
+                let nextHeading = null;
+                for (const candidate of headings) {
+                    if (candidate.line > heading.line && candidate.order <= heading.order) {
+                        nextHeading = candidate;
+                        break;
+                    }
+                }
+                if (nextHeading) {
+                    region.foldTo = nextHeading.from - 1;
+                    region.endTo = nextHeading.from - 1;
+                } else {
+                    region.foldTo = doc.length;
+                    region.endTo = doc.length;
+                }
+                regions.push(region);
             }
             return regions;
         }
@@ -467,7 +525,27 @@ const collapsibleEditorColorsPlugin = (settings) => ViewPlugin.fromClass(
             // The second 0 will hold the indentation level of each line in time
             // We are indexing from 1 (to match doc.lines) so levels[0] is just an unused placeholder
             let levels = Array.from({ length: doc.lines + 1 }, (_, i) => [i, 0, 0]);
+            let inCodeBlock = false;
+            let codeBlockChar = '';
+            let codeBlockLen = 0;
             for (let i = 1; i < docLines.length; i++) {
+                if (!inCodeBlock) {
+                    let match = docLines[i].match(/^ {0,3}([`~]{3,})/);
+                    if (match) {
+                        inCodeBlock = true;
+                        codeBlockChar = match[1][0];
+                        codeBlockLen = match[1].length;
+                        continue;
+                    }
+                } else {
+                    let match = docLines[i].match(new RegExp(`^ {0,3}${codeBlockChar}{${codeBlockLen},}$`));
+                    if (match) {
+                        inCodeBlock = false;
+                        codeBlockChar = '';
+                        codeBlockLen = 0;
+                    }
+                    continue;
+                }
                 if (!docLines[i].startsWith(startToken)) {
                     // Not the start of a block, make no changes to levels
                     continue;
