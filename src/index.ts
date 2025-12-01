@@ -231,14 +231,7 @@ joplin.plugins.register({
 			let startToken;
 			switch (message.name) {
 				case 'collapsibleToggle':
-					    const note = await joplin.workspace.selectedNote();
-    if (!note) return;
-
-    let body = note.body;
-    if (body.endsWith(' ')) body = body.slice(0, -1);
-    else body += ' ';
-
-    await joplin.data.put(['notes', note.id], null, { body : body });
+					
 					const { id, isFolded, lineNum } = message.data;
 					if (id in collapsibleList) {
 						if (lockEditorAndWebview || blocksRemember) {
