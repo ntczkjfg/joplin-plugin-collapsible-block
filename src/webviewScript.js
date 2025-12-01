@@ -5,8 +5,7 @@ export default (context) => {
                 doWebviewColors: options.settingValue('doWebviewColors'),
                 startToken: options.settingValue('startToken'),
                 endToken: options.settingValue('endToken'),
-                rememberOpenOrClose: options.settingValue('rememberOpenOrClose'),
-                collapsibleHeaders: options.settingValue('collapsibleHeaders'),
+                headingsCollapsible: options.settingValue('headingsCollapsible'),
                 darkMode: options.settingValue('darkMode'),
                 pluginId: context.pluginId,
             };
@@ -16,7 +15,7 @@ export default (context) => {
             const headingRuleObj = markdownIt.block.ruler.__rules__.find(r => r.name === 'heading');
             //for (const rule of markdownIt.block.ruler.__rules__) console.error(rule.name);
             let headingRule = headingRuleObj?.fn;
-            if (headingRule !== undefined && settings.collapsibleHeaders) {
+            if (headingRule !== undefined && settings.headingsCollapsible) {
                 // Replace the built-in heading rule with our rule that does the same thing but makes them collapsible
                 function collapsibleHeaderWrapper(state, start, end, silent) {
                     return collapsibleHeader(state, start, end, silent, settings, headingRule);
@@ -38,9 +37,37 @@ export default (context) => {
 }
 
 function collapsibleHeader(state, start, end, silent, settings, headingRule) {
+    const { startToken, endToken, doWebviewColors, darkMode, collapsibleList, pluginId } = settings
+    if (collapsibleList === undefined) return false;
+
     if (silent) return headingRule(state, start, end, true);
     // Just hijack the heading rule
     if (!headingRule(state, start, end, true)) return false;
+
+    let widget;
+    for (const wid of Object.values(collapsibleList)) {
+        if (wid.lineNum === start + 1) {
+            widget = wid;
+            break;
+        }
+    }
+    if (widget === undefined) {
+        widget = {
+            id: Math.random().toString(36).slice(2),
+            lineNum: start,
+            isFolded: false,
+            doUpdate: true,
+            webviewFolded: false,
+            heading: true,
+        };
+    }
+    let openFlag;
+    if (widget.webviewFolded) {
+        openFlag = [ 'closed', '' ];
+    } else {
+        openFlag = [ 'open', '' ];
+    }
+
     // Below code replicates logic of markdown-It's built-in heading rule
     // Basically a straight copy+paste of it, but with added lines for the details and summary tags
     let pos = state.bMarks[start] + state.tShift[start];
@@ -63,8 +90,19 @@ function collapsibleHeader(state, start, end, silent, settings, headingRule) {
     let title = state.src.slice(pos, max).trim();
 
     let token = state.push('details_open', 'details', 1);
-    token.attrs = [['class', 'cb-heading'],
-                   ['open', '']];
+    // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed
+    token.attrs = [[ 'class', 'cb-heading' ],
+                   [ 'ontoggle',   `if ((this.open !== !this.hasAttribute('closed')) || this.hasAttribute('debounce')) {
+                                        webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle',
+                                                                                data: { isFolded: !this.open,
+                                                                                        lineNum: ${state.line + 1},
+                                                                                        id: '${widget.id}',
+                                                                                      }
+                                                                              }
+                                        );
+                                        this.setAttribute('debounce', '');
+                                    }` ],
+                   openFlag];
     state.push('summary_open', 'summary', 1);
 
     const token_o  = state.push('heading_open', 'h' + String(level), 1);
@@ -136,7 +174,7 @@ let foundBlocks = [];
 let lastStart = 0;
 // Tokenizing the collapsible blocks
 function collapsibleBlock(state, start, end, silent, settings) {
-    const { startToken, endToken, doWebviewColors, rememberOpenOrClose, darkMode, collapsibleList, pluginId } = settings;
+    const { startToken, endToken, doWebviewColors, darkMode, collapsibleList, pluginId } = settings;
     if (startToken === undefined || endToken === undefined || collapsibleList === undefined) {
         return false
     }
@@ -228,6 +266,7 @@ function collapsibleBlock(state, start, end, silent, settings) {
             isFolded: (title === undefined || !title.startsWith(startToken)),
             doUpdate: (state.src.slice(state.eMarks[endLine] - 2 * endToken.length, state.eMarks[endLine]) !== endToken + endToken),
             webviewFolded: (title === undefined || !title.startsWith(startToken)),
+            heading: false,
         };
     }
     // Add to foundBlocks, calculate nesting level
@@ -240,20 +279,9 @@ function collapsibleBlock(state, start, end, silent, settings) {
     }
     // Mod 8 because that's how many colors we support
     nestingLevel = nestingLevel % 8;
+    if (title !== undefined && title.startsWith(startToken)) title = title.slice(startToken.length);
     // openFlag determines if the block displays opened or closed by default
     let openFlag;
-    if (title !== undefined && title.startsWith(startToken)) {
-        // This happens if the startToken is doubled - which is how we indicate
-        // a block should display as open. Remove the token from the title and 
-        // set openFlag to mark the block as open
-        title = title.slice(startToken.length);
-        openFlag = [ 'open', '' ];
-    } else {
-        // Block is closed
-        // putting 'closed' in the tag doesn't actually do anything - they're closed by default
-        // But I use it in the ontoggle call to only postMessage when it's actually relevant
-        openFlag = [ 'closed', '' ];
-    }
     if (widget.webviewFolded) {
         openFlag = [ 'closed', '' ];
     } else {

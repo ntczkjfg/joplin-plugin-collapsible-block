@@ -1,5 +1,5 @@
 import joplin from 'api';
-import { ContentScriptType, ToolbarButtonLocation, SettingItemType } from 'api/types';
+import { ContentScriptType, ToolbarButtonLocation, SettingItemType, ModelType } from 'api/types';
 
 joplin.plugins.register({
 	onStart: async function() {
@@ -43,7 +43,7 @@ joplin.plugins.register({
 		        value: '}:', // Default end token
 		        label: 'End Token',
 		    },
-		    rememberOpenOrClose: {
+		    blocksRemember: {
 		        section: 'collapsibleBlocks',
 		    	public: true,
 		    	type: SettingItemType.Bool,
@@ -76,13 +76,6 @@ joplin.plugins.register({
 		    	label: '',
 		    	description: 'How many nested layers of collapsible blocks to apply the above indentation level to, before maxing out.',
 		    },
-		    collapsibleHeaders: {
-		    	section: 'collapsibleBlocks',
-		    	public: true,
-		    	type: SettingItemType.Bool,
-		    	value: true,
-		    	label: 'Enable header-based collapsing.',
-		    },
 		    collapsibleInEditor: {
 		    	section: 'collapsibleBlocks',
 		    	public: true,
@@ -90,16 +83,6 @@ joplin.plugins.register({
 		    	value: true,
 		    	label: 'Allow collapsing blocks within the markdown editor as well.',
 		    	description: 'The below options won\'t do anything if this isn\'t checked',
-		    },
-		    matchEditorToWebview: {
-		        section: 'collapsibleBlocks',
-		    	public: true,
-		    	type: SettingItemType.Bool,
-		    	value: true,
-		    	label: 'Match editor folding to webview folding on initial note load',
-		    	description: `When enabled, block folding states in the editor will mirror the webview's 
-		    	block folding states when a note is first opened. When disabled, all collapsible sections in the editor
-		    	will initially be opened.`,
 		    },
 		    lockEditorAndWebview: {
 		    	section: 'collapsibleBlocks',
@@ -109,6 +92,30 @@ joplin.plugins.register({
 		    	label: 'Keep editor and webview folding in sync',
 		    	description: `When a collapsible section is opened or closed in either the editor or webview, 
 		    	the corresponding section in the other view will update automatically.`,
+		    },
+		    headingsCollapsible: {
+		    	section: 'collapsibleBlocks',
+		    	public: true,
+		    	type: SettingItemType.Bool,
+		    	value: true,
+		    	label: 'Enable heading-based collapsing in the webview',
+		    	description: 'Headings will make everything beneath them, until the next heading of equal or higher priority, collapsible',
+		    },
+		    headingsCollapsibleEditor: {
+		    	section: 'collapsibleBlocks',
+		    	public: true,
+		    	type: SettingItemType.Bool,
+		    	value: true,
+		    	label: 'Enable heading-based collapsing in the editor',
+		    	description: '',
+		    },
+		    headingsRemember: {
+		    	section: 'collapsibleBlocks',
+		    	public: true,
+		    	type: SettingItemType.Bool,
+		    	value: true,
+		    	label: 'Remember when collapsible headings are left opened or closed',
+		    	description: 'If disabled, headings will always be initially opened',
 		    },
 		    isMobile: {
 		        section: 'collapsibleBlocks',
@@ -132,16 +139,51 @@ joplin.plugins.register({
 		    	label: 'collapsibleList'
 		    }
 		});
-		joplin.settings.setValue('collapsibleList', '{}')
-		let collapsibleList = {};
+		const [
+			lockEditorAndWebview,
+		    blocksRemember,
+		    headingsRemember,
+		    startToken,
+		    endToken,
+		] = await Promise.all([
+		    joplin.settings.value('lockEditorAndWebview'),
+		    joplin.settings.value('blocksRemember'),
+		    joplin.settings.value('headingsRemember'),
+		    joplin.settings.value('startToken'),
+		    joplin.settings.value('endToken'),
+		]);
+
+		let collapsibleList: any = {};
+		const note = await joplin.workspace.selectedNote();
+    	let noteId;
+    	if (note) noteId = note.id;
+    	if (noteId && headingsRemember) {
+	    	const headingList: any = await joplin.data.userDataGet(ModelType.Note, noteId, 'headings');
+	    	if (headingList) {
+				for (const heading of Object.values(headingList) as any) {
+				    collapsibleList[heading.id] = heading;
+				}
+			}
+		}
+		joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
 		await joplin.workspace.onNoteSelectionChange(async (event) => {
 			// Detects when the note is changed
 			// editor script also does this, but doing it here too lets
 			// the editor avoid an async call and sends the blank list to
 			// the webview script faster
+			if (event.value && event.value.length) noteId = event.value[0];
 			collapsibleList = {};
-		    await joplin.settings.setValue('collapsibleList', '{}');
+			if (noteId && headingsRemember) {
+				const headingList: any = await joplin.data.userDataGet(ModelType.Note, noteId, 'headings');
+				if (headingList) {
+					for (const heading of Object.values(headingList) as any) {
+					    collapsibleList[heading.id] = heading;
+					}
+				}
+			}
+		    await joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
 		});
+
 		// Create a toolbar button
 		await joplin.commands.register({
 			name: 'insertCollapsibleBlock',
@@ -150,8 +192,6 @@ joplin.plugins.register({
 			execute: async () => {
 				const selectedText = (await joplin.commands.execute('selectedText') as string);
 				let content = selectedText.split('\n');
-				const startToken = await joplin.settings.value('startToken');
-				const endToken = await joplin.settings.value('endToken');
 				if (content.length == 1 && content[0] !== '') {
 					if (!content[0].startsWith(startToken)) {
 						// Just a title
@@ -191,16 +231,24 @@ joplin.plugins.register({
 			let startToken;
 			switch (message.name) {
 				case 'collapsibleToggle':
+					    const note = await joplin.workspace.selectedNote();
+    if (!note) return;
+
+    let body = note.body;
+    if (body.endsWith(' ')) body = body.slice(0, -1);
+    else body += ' ';
+
+    await joplin.data.put(['notes', note.id], null, { body : body });
 					const { id, isFolded, lineNum } = message.data;
 					if (id in collapsibleList) {
-						if (await joplin.settings.value('lockEditorAndWebview') || await joplin.settings.value('rememberOpenOrClose')) {
+						if (lockEditorAndWebview || blocksRemember) {
 							collapsibleList[id].isFolded = isFolded;
 						}
 						collapsibleList[id].webviewFolded = isFolded;
 					} else {
 						for (const widget of Object.values(collapsibleList)) {
 							if (widget['lineNum'] === lineNum) {
-								if (await joplin.settings.value('lockEditorAndWebview')) {
+								if (lockEditorAndWebview) {
 									widget['isFolded'] = isFolded;
 								}
 								widget['webviewFolded'] = isFolded;
@@ -211,9 +259,14 @@ joplin.plugins.register({
 					joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
 					// Forces the editor to update even though nothing changed
 					// Moreso, does so in a way we can detect
-					await joplin.commands.execute('editor.execCommand',
-        							      { name: 'replaceRange',
-								   	        args: ['', { line: 0, ch: 0 }, { line: 0, ch: 0 }] });
+					if (!isMobile) {
+						await joplin.commands.execute('editor.execCommand',
+	        							      { name: 'replaceRange',
+									   	        args: ['', { line: 0, ch: 0 }, { line: 0, ch: 0 }] });
+					} else {
+						const note = await joplin.workspace.selectedNote();
+						if (note) await joplin.data.put(['notes', note.id], null, { body: note.body });
+					}
 					break;
 				default:
 					break;
@@ -232,50 +285,101 @@ joplin.plugins.register({
 		await joplin.contentScripts.onMessage(editorScriptId, async (message: { name: string, data: { [key: string]: any } }) => {
 			switch (message.name) {
 				case 'getSetting':
+					//console.error('postMessage: getSetting');
 					return await joplin.settings.value(message.data.setting);
 					break;
 				case 'getSettings':
-					const [doEditorColors, startToken, endToken,
-							indentLevel, maxIndentLevel, collapsibleInEditor,
-							matchEditorToWebview, lockEditorAndWebview, darkMode, rememberOpenOrClose] = await Promise.all([
+					//console.error('postMessage: getSettings');
+					const [doEditorColors, indentLevel, maxIndentLevel, collapsibleInEditor,
+							darkMode, headingsCollapsibleEditor] = await Promise.all([
 				        joplin.settings.value('doEditorColors'),
-				        joplin.settings.value('startToken'),
-				        joplin.settings.value('endToken'),
 				        joplin.settings.value('indentLevel'),
 				        joplin.settings.value('maxIndentLevel'),
 				        joplin.settings.value('collapsibleInEditor'),
-				        joplin.settings.value('matchEditorToWebview'),
-				        joplin.settings.value('lockEditorAndWebview'),
 				        joplin.settings.value('darkMode'),
-				        joplin.settings.value('rememberOpenOrClose'),
+				        joplin.settings.value('headingsCollapsibleEditor'),
 				    ]);
 				    const settings = { doEditorColors, startToken, endToken, indentLevel, maxIndentLevel,
-				    	collapsibleInEditor, matchEditorToWebview, lockEditorAndWebview, darkMode, rememberOpenOrClose };
+				    	collapsibleInEditor, lockEditorAndWebview, darkMode, blocksRemember, headingsCollapsibleEditor };
 				    return settings;
 					break;
 				case 'getList':
+					//console.error('postMessage: getList');
 					return collapsibleList;
 				case 'setList':
+					//console.error('postMessage: setList');
 					collapsibleList = message.data['collapsibleList'];
 					joplin.settings.setValue('collapsibleList', JSON.stringify(message.data['collapsibleList']));
+					const headings: any = {};
+					for (const collapsible of Object.values(collapsibleList) as any) {
+					    if (collapsible.heading) {
+					        headings[collapsible.lineNum] = collapsible;
+					    }
+					}
+					joplin.data.userDataSet(ModelType.Note, noteId, 'headings', headings);
 					break;
+				case 'fixList':
+					//console.error('postMessage: fixList');
+					collapsibleList = message.data['collapsibleList'];
+					if (!headingsRemember || !noteId) return collapsibleList;
+					const headingList: any = await joplin.data.userDataGet(ModelType.Note, noteId, 'headings');
+					if (!headingList) return collapsibleList;
+					const toDelete = [];
+					for (const headingKey in headingList) {
+					    const lineNum = parseInt(headingKey, 10);
+					    let found = false;
+
+					    for (const collapsibleKey in collapsibleList) {
+					        const collapsible = collapsibleList[collapsibleKey];
+					        if (collapsible.lineNum === lineNum) {
+					        	headingList[headingKey].id = collapsibleKey
+					            collapsibleList[collapsibleKey] = headingList[headingKey];
+					            found = true;
+					            break;
+					        }
+					    }
+					    if (!found) {
+					        toDelete.push(headingKey);
+					    }
+					}
+					for (const key in toDelete) {
+						delete headingList[key];
+					}
+					joplin.data.userDataSet(ModelType.Note, noteId, 'headings', headingList);
+					return collapsibleList;
 				case 'toggleById':
+					//console.error('postMessage: toggleById');
 					collapsibleList[message.data.id].isFolded = message.data.isFolded;
-					if (await joplin.settings.value('lockEditorAndWebview')) {
+					if (lockEditorAndWebview) {
 						collapsibleList[message.data.id].webviewFolded = message.data.isFolded;
 					}
 					joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
 					break;
 				case 'collapsibleToggle':
+					//console.error('postMessage: collapsibleToggle');
 					const { id, isFolded } = message.data;
+					//console.error(`id = ${id}, isFolded = ${isFolded}, collapsibleList[id].isFolded = ${collapsibleList[id].isFolded}`);
+					if (collapsibleList[id].isFolded === isFolded) break;
 					collapsibleList[id].isFolded = isFolded;
-					if (await joplin.settings.value('lockEditorAndWebview')) {
+					//console.error(`id = ${id}, isFolded = ${isFolded}, collapsibleList[id].isFolded = ${collapsibleList[id].isFolded}`);
+					if (lockEditorAndWebview) {
 						collapsibleList[id]['webviewFolded'] = isFolded;
 						await joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
 					}
-					await joplin.commands.execute('editor.execCommand',
-        							      { name: 'replaceRange',
-								   	        args: ['', { line: 0, ch: 0 }, { line: 0, ch: 0 }] });
+					updateEditor(isMobile);
+					if (collapsibleList[id].heading) {
+						if (!noteId) break;
+						const headings2 = await joplin.data.userDataGet(ModelType.Note, noteId, 'headings');
+						if (!headings2) break;
+						headings2[collapsibleList[id].lineNum] = collapsibleList[id];
+						joplin.data.userDataSet(ModelType.Note, noteId, 'headings', headings2);
+						updateWebview();
+					}
+					break;
+				case 'error':
+					break;
+					const error = message.data.error;
+					console.error(error);
 					break;
 				default:
 					break;
@@ -283,3 +387,40 @@ joplin.plugins.register({
 		});
 	},
 });
+
+async function updateWebview() {
+	//console.error('Updating Webview');
+    const visible = await joplin.settings.globalValue('noteVisiblePanes');
+    if (!visible || (!visible.includes('viewer'))) return;
+
+    const note = await joplin.workspace.selectedNote();
+    if (!note) return;
+
+    let body = note.body;
+    if (body.endsWith(' ')) body = body.slice(0, -1);
+    else body += ' ';
+
+    await joplin.data.put(['notes', note.id], null, { body });
+}
+
+async function updateEditor(isMobile) {
+	//console.error('Updating Editor');
+    const visible = await joplin.settings.globalValue('noteVisiblePanes');
+    if (!visible || (!visible.includes('editor'))) return;
+
+    if (!isMobile) {
+    	await joplin.commands.execute('editor.execCommand',
+    		{ name: 'replaceRange',
+    			args: ['', { line: 0, ch: 0 }, { line: 0, ch: 0 }] });
+    	return;
+    }
+
+    const note = await joplin.workspace.selectedNote();
+    if (!note) return;
+
+    let body = note.body;
+    if (body.endsWith(' ')) body = body.slice(0, -1);
+    else body += ' ';
+
+    await joplin.data.put(['notes', note.id], null, { body : body });
+}

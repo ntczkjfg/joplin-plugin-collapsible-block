@@ -7,8 +7,9 @@ export default (context) => {
         plugin: async function(CodeMirror) {
             const settings = await context.postMessage({ name: 'getSettings', data: {} });
             const { doEditorColors, startToken, endToken, indentLevel,
-                maxIndentLevel, collapsibleInEditor, matchEditorToWebview,
-                lockEditorAndWebview, darkMode, rememberOpenOrClose } = settings;
+                maxIndentLevel, collapsibleInEditor,
+                lockEditorAndWebview, darkMode, rememberOpenOrClose,
+                headingsCollapsibleEditor } = settings;
             // Add codeFolding (with no placeholder) and our foldPlugin
             CodeMirror.addExtension(codeFolding({
                 placeholderDOM: () => document.createElement('span')
@@ -56,7 +57,7 @@ COLLAPSIBLES IN THE EDITOR PLUGIN
 */
 
 class FoldWidget extends WidgetType {
-    constructor(id, isFolded, startFrom, startTo, foldFrom, foldTo, endTo, doUpdate, postMessage, settings) {
+    constructor(id, isFolded, startFrom, startTo, foldFrom, foldTo, endTo, doUpdate, postMessage, settings, heading) {
         super();
         this.id = id;
         this.isFolded = isFolded;
@@ -68,6 +69,7 @@ class FoldWidget extends WidgetType {
         this.doUpdate = doUpdate;
         this.postMessage = postMessage;
         this.settings = settings;
+        this.heading = heading ?? false;
     }
 
     eq(other) {
@@ -78,12 +80,16 @@ class FoldWidget extends WidgetType {
     }
 
     toDOM(view) {
-        if (!this.settings.collapsibleInEditor) return document.createElement('span');
+        if ((!this.heading && !this.settings.collapsibleInEditor) || (this.heading && !this.settings.headingsCollapsibleEditor)) {
+            return document.createElement('span');
+        }
         const span = document.createElement('span');
         span.className = 'cm-fold-toggle';
         span.textContent = this.isFolded ? ' ▶ ' : ' ▼ ';
         span.style.cursor = 'pointer';
-        span.onclick = () => {
+        span.onclick = span.ontouchstart = () => {
+            this.postMessage({ name: 'error', data: { 'error': 'CLICKED!' } });
+            this.postMessage({ name: 'error', data: { 'error': `isFolded = ${this.isFolded}` } });
             this.postMessage({ name: 'collapsibleToggle', data: { id: this.id, isFolded: !this.isFolded } }).then(() => {
                 view.dispatch({ changes: [{ from: 0, to: 0, insert: '' }] });
             });
@@ -104,24 +110,27 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 this.currentNoteLength = view.state.doc.length; // Helps detect when the note changes
                 this.foldWidgets = {};
                 this.collapsibleList = {};
-                this.decorations = Decoration.none;
-                this.decorations = this.buildDecorations(view, true);
+                this.update(undefined, view);
             } catch (e) {
                 console.error('Error in fold plugin constructor:', e);
                 this.decorations = Decoration.none;
             }
         }
 
-        async update(update) {
+        async update(update, view) {
             try {
-                if (update.docChanged || update.viewportChanged) {
+                if (view || update.docChanged || update.viewportChanged) {
+                    postMessage({ name: 'error', data: { 'error': 'Regular update!' } });
                     const newNote = this.noteChanged(update);
-                    if (newNote) {
+                    if (newNote || view) {
+                        view = view ?? update.view;
                         //this.decorations = Decoration.none;
                         this.collapsibleList = {};
                         // index.ts detects this event on its own, no need to post it a message
                         this.foldWidgets = {};
-                        this.decorations = this.buildDecorations(update.view, true);
+                        this.decorations = this.buildDecorations(view, true);
+                        this.collapsibleList = await postMessage({ name: 'fixList', data: { 'collapsibleList': this.collapsibleList } });
+                        this.decorations = this.buildDecorations(view, true);
                     } else {
                         this.updateFoldWidgetPositions(update);
                         this.decorations = this.buildDecorations(update.view, false);
@@ -130,6 +139,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     return;
                     this.decorations = this.buildDecorations(update.view, false);
                 } else if (update.transactions.some(tr => tr.annotations.some(annotation => annotation.value === 'input.type.compose'))) {
+                    postMessage({ name: 'error', data: { 'error': 'Special update!' } });
                     this.collapsibleList = await postMessage({ name: 'getList', data: {} });
                     this.decorations = this.buildDecorations(update.view, false);
                 }
@@ -150,6 +160,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                         if (toA <= foldWidget.startTo) {
                             foldWidget.startFrom += delta;
                             foldWidget.endTo     += delta;
+                            this.collapsibleList[id].lineNum = update.view.state.doc.lineAt(foldWidget.startFrom).number;
                             continue;
                         } else {
                             delete this.foldWidgets[id];
@@ -177,9 +188,11 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     }
                 }
             });
+            postMessage({ name: 'setList', data: { collapsibleList: this.collapsibleList } });
         }
 
         toggleWidget(view, foldWidget) {
+            postMessage({ name: 'error', data: { 'error': 'toggleWidget' } });
             let effects = { effects: [], changes: [] };
             const { startToken } = settings;
 
@@ -187,7 +200,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
             const lineText = line.text.replace(/^[ \t]+/, "");
             let foldFrom = foldWidget.foldFrom;
             let foldTo = foldWidget.foldTo;
-            if (foldWidget.doUpdate && (settings.lockEditorAndWebview || settings.rememberOpenOrClose)) {
+            if (!foldWidget.heading && foldWidget.doUpdate && (settings.lockEditorAndWebview || settings.rememberOpenOrClose)) {
                 const from = line.from + line.text.indexOf(startToken);
                 if (foldWidget.isFolded) {
                     if (!lineText.startsWith(startToken + startToken)) {
@@ -211,8 +224,9 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     }
                 }
             }
-            if (settings.collapsibleInEditor) {
+            if ((!foldWidget.heading && settings.collapsibleInEditor) || (foldWidget.heading && settings.headingsCollapsibleEditor)) {
                 if (foldWidget.isFolded) {
+                    postMessage({ name: 'error', data: { 'error': 'unfolding!' } });
                     effects.effects = [
                         unfoldEffect.of({
                             from: foldFrom,
@@ -220,6 +234,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                         })
                     ];
                 } else {
+                    postMessage({ name: 'error', data: { 'error': 'folding!' } });
                     effects.effects = [
                         foldEffect.of({
                             from: foldFrom,
@@ -234,6 +249,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
         }
 
         updateFoldWidgets(view) {
+            postMessage({ name: 'error', data: { 'error': 'updateFoldWidgets' } });
             const effects = { effects: [], changes: [] };
             for (const foldWidget of Object.values(this.foldWidgets)) {
                 if (this.collapsibleList[foldWidget.id].isFolded != foldWidget.isFolded) {
@@ -247,6 +263,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
 
         // Detects, synchronously, if the user changed notes
         noteChanged(update) {
+            if (!update) return false;
             let noteChanged = false;
             update.changes.iterChanges( (fromA, toA, fromB, toB, inserted) => {
                 if (
@@ -262,6 +279,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
         }
 
         buildDecorations(view, initial) {
+            postMessage({ name: 'error', data: { 'error': 'buildDecorations' } });
             // This function must run even if collapsibles are NOT collapsible in the editor
             // This is so FoldWidgets and their associated ids still get created
             // These are used to make the behavior of collapsibles in the webview more reliable
@@ -283,7 +301,8 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     }
                 }
                 if (del) {
-                    if (settings.collapsibleInEditor) effects.push(unfoldEffect.of({ from: foldWidget.foldFrom, to: foldWidget.foldTo }));
+                    //console.error('DELETING WIDGET!');
+                    effects.push(unfoldEffect.of({ from: foldWidget.foldFrom, to: foldWidget.foldTo }));
                     delete this.foldWidgets[id];
                     if (id in this.collapsibleList) delete this.collapsibleList[id];
                 }
@@ -291,7 +310,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
             for (const region of regions) {
                 // Determine if this region is folded or unfolded in the editor
                 let isFolded = false;
-                if (settings.collapsibleInEditor) {
+                if ((!region.heading && settings.collapsibleInEditor) || (region.heading && settings.headingsCollapsibleEditor)) {
                     // Will iterate over all folded regions in the editor which intersect the interval [region.foldFrom, region.foldTo]
                     // Exits iteration early if false returned
                     folded.between(region.foldFrom, region.foldTo, (foldedFrom, foldedTo, foldedValue) => {
@@ -324,7 +343,8 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                                             region.endTo,
                                             region.doUpdate,
                                             postMessage,
-                                            settings
+                                            settings,
+                                            region.heading
                                             );
                     this.foldWidgets[widget.id] = widget;
                 }
@@ -337,13 +357,14 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                                                         doUpdate: region.doUpdate,
                                                         isFolded: initial ? region.isFolded : isFolded,
                                                         lineNum: region.lineNum,
-                                                        webviewFolded: region.isFolded };
+                                                        webviewFolded: region.isFolded,
+                                                        heading: region.heading };
                 }
                 const deco = Decoration.widget({ widget }).range(region.foldFrom);
                 if (initial &&
                     region.isFolded &&
-                    settings.collapsibleInEditor &&
-                    (settings.matchEditorToWebview || settings.lockEditorAndWebview)) {
+                    ((!widget.heading && settings.collapsibleInEditor) || (widget.heading && settings.headingsCollapsibleEditor)) &&
+                    settings.lockEditorAndWebview) {
                     effects.push(foldEffect.of({ from: region.foldFrom, to: region.foldTo }));
                     widget.isFolded = true;
                 }
@@ -351,28 +372,29 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 builder.push(deco);
             }
             postMessage({ name: 'setList', data: { collapsibleList: this.collapsibleList } });
-            if (settings.collapsibleInEditor || settings.rememberOpenOrClose) this.updateFoldWidgets(view);
+            if (settings.collapsibleInEditor || settings.headingsCollapsibleEditor || settings.rememberOpenOrClose) {
+                this.updateFoldWidgets(view);
+            }
             if (effects) setTimeout(() => {view.dispatch({ effects: effects });}, 0);
             return Decoration.set(builder, true);
         }
 
         processLines(doc) {
             const { startToken, endToken } = settings;
-            let docLines = ['']; // First entry is a dummy so we can index from 1, matching cm conventions
-            for (let i = 1, line; i <= doc.lines; i++) { // Yes it indexes from 1
-                line = doc.line(i).text;
-                // Remove leading spaces and tabs
-                line = line.replace(/^[ \t]+/, "");
-                docLines.push(line)
-            }
             const regions = [];
             let inCodeBlock = false;
             let codeBlockChar = '';
             let codeBlockLen = 0;
             const headings = [];
-            for (let i = 1; i < docLines.length; i++) { // docLines indexes from 1
+            // Below are unused for now but planning to use later
+            function escapeForRegex(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+            const startTokenRegex = new RegExp('^[ \t]*((?:' + escapeForRegex(startToken) + '){1,2})');
+            let match;
+
+            for (let i = 1; i < doc.lines; i++) { // doc.lines indexes from 1
+                const line = doc.line(i).text;
                 if (!inCodeBlock) {
-                    let match = docLines[i].match(/^ {0,3}([`~]{3,})/);
+                    match = line.match(/^ {0,3}([`~]{3,})/);
                     if (match) {
                         inCodeBlock = true;
                         codeBlockChar = match[1][0];
@@ -380,7 +402,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                         continue;
                     }
                 } else {
-                    let match = docLines[i].match(new RegExp(`^ {0,3}${codeBlockChar}{${codeBlockLen},}$`));
+                    match = line.match(new RegExp(`^ {0,3}${codeBlockChar}{${codeBlockLen},}$`));
                     if (match) {
                         inCodeBlock = false;
                         codeBlockChar = '';
@@ -389,7 +411,8 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     continue;
                 }
 
-                let match = docLines[i].match(/^ {0,3}(#{1,6})([ \t](.*?)$|$)/);
+                // Headings! Starts with 0-3 spaces, then 1-6 #s, then a space or tab then anything else - can also end immediately after the #s
+                match = line.match(/^ {0,3}(#{1,6})([ \t](.*?)$|$)/);
                 if (match) {
                     const heading = {
                         line: i,
@@ -398,27 +421,29 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                         to: doc.line(i).to,
                     };
                     headings.push(heading);
-                }
-                
-                if (!docLines[i].startsWith(startToken)) {
-                    // Not the start of a block, make no changes to levels
                     continue;
                 }
-                const isFolded = !docLines[i].startsWith(startToken + startToken);
+
+                // Start looking for user-defined collapsible blocks now
+                match = line.match(startTokenRegex);
+                if (!match) continue; // Not the start of a block, make no changes to levels
+
+                const isFolded = match[1].length !== 2*startToken.length; // Start token is doubled
                 // This line starts with our startToken
-                if (docLines[i].endsWith(endToken)) continue; // And ends with it - nothing to collapse
+                if (line.endsWith(endToken)) continue; // And ends with it - nothing to collapse
                 // Look for the matching endToken
                 let endLine;
                 let endTokenLen;
-                for (let j = i + 1, nestedBlocks = 0; j < docLines.length; j++) {
-                    if (docLines[j].startsWith(startToken)) {
+                for (let j = i + 1, nestedBlocks = 0; j < doc.lines; j++) {
+                    const lineJ = doc.line(j).text;
+                    if (startTokenRegex.test(lineJ)) {
                         nestedBlocks++;
                     }
-                    if (docLines[j].endsWith(endToken)) {
+                    if (lineJ.endsWith(endToken)) {
                         if (nestedBlocks === 0) {
                             endLine = j;
 
-                            if (docLines[j].endsWith(endToken + endToken)) endTokenLen = 2 * endToken.length;
+                            if (lineJ.endsWith(endToken + endToken)) endTokenLen = 2 * endToken.length;
                             else endTokenLen = endToken.length
                             break;
                         }
@@ -426,7 +451,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     }
                 }
                 if (endLine) {
-                    const startFrom = doc.line(i).from + doc.line(i).text.indexOf(startToken);
+                    const startFrom = doc.line(i).from + line.indexOf(startToken);
                     const startTo = startFrom + (isFolded ? startToken.length : 2*startToken.length);
                     regions.push({
                         isFolded: isFolded,
@@ -440,6 +465,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     });
                 }
             }
+            // Add the headings to regions now that we have all of them
             for (const heading of headings) {
                 const region = {
                     isFolded: false,
@@ -448,7 +474,9 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     foldFrom: heading.to,
                     doUpdate: false,
                     lineNum: heading.line,
+                    heading: true,
                 };
+                // Find next heading of equal or higher precedence
                 let nextHeading = null;
                 for (const candidate of headings) {
                     if (candidate.line > heading.line && candidate.order <= heading.order) {
