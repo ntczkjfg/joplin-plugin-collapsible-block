@@ -37,57 +37,33 @@ export default (context) => {
 }
 
 function collapsibleHeader(state, start, end, silent, settings, headingRule) {
-    const { startToken, endToken, doWebviewColors, darkMode, collapsibleList, pluginId } = settings
+    const { collapsibleList, pluginId } = settings
     if (collapsibleList === undefined) return false;
-
-    if (silent) return headingRule(state, start, end, true);
-    // Just hijack the heading rule
-    if (!headingRule(state, start, end, true)) return false;
 
     let widget;
     for (const wid of Object.values(collapsibleList)) {
-        if (wid.lineNum === start + 1) {
+        if (wid.lineNum === start) {
             widget = wid;
             break;
         }
     }
-    if (widget === undefined) {
-        widget = {
-            id: Math.random().toString(36).slice(2),
-            lineNum: start,
-            isFolded: false,
-            doUpdate: true,
-            webviewFolded: false,
-            heading: true,
-        };
-    }
+    if (!widget || !widget.heading) return false;
+    //console.error(`widget.lineNum = ${widget.lineNum}, widget.lineNumEnd = ${widget.lineNumEnd}`);
+    let pos = state.bMarks[start] + state.tShift[start];
+    let max = state.eMarks[start];
+    let line = state.src.slice(pos, max);
+    const match = line.match(/^ {0,3}(#{1,6})([ \t](.*?)$|$)/);
+    if (!match) return false; // Sanity check, shouldn't ever happen by this point
+    if (silent) return true;
+    const level = match[1].length;
+    const title = match[2].replace(/^[ \t]/, '');
     let openFlag;
     if (widget.webviewFolded) {
         openFlag = [ 'closed', '' ];
     } else {
         openFlag = [ 'open', '' ];
     }
-
-    // Below code replicates logic of markdown-It's built-in heading rule
-    // Basically a straight copy+paste of it, but with added lines for the details and summary tags
-    let pos = state.bMarks[start] + state.tShift[start];
-    let max = state.eMarks[start];
-    let line = state.src.slice(pos, max);
-    // count heading level
-    let level = 1;
-    let ch = state.src.charCodeAt(++pos);
-    while (ch === 0x23/* # */ && pos < max && level <= 6) {
-        level++;
-        ch = state.src.charCodeAt(++pos);
-    }
-    max = state.skipSpacesBack(max, pos);
-    const tmp = state.skipCharsBack(max, 0x23, pos); // #
-    if (tmp > pos &&
-            (state.src.charCodeAt(tmp - 1) === 0x09 /* Space */ ||
-             state.src.charCodeAt(tmp - 1) === 0x20 /* Tab */)) {
-        max = tmp;
-    }
-    let title = state.src.slice(pos, max).trim();
+    const nextLine = widget.lineNumEnd;
 
     let token = state.push('details_open', 'details', 1);
     // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed
@@ -119,51 +95,9 @@ function collapsibleHeader(state, start, end, silent, settings, headingRule) {
 
     state.push('summary_close', 'summary', -1);
 
-    let nextLine = start + 1;
-    let inFence = false;
-    let fenceChar = '';
-    let fenceLength = 0;
-    for (; nextLine < end; nextLine++) {
-        let lineStart = state.bMarks[nextLine] + state.tShift[nextLine];
-        let lineEnd = state.eMarks[nextLine];
-        let line = state.src.slice(lineStart, lineEnd);
-
-        // Check for fence start
-        if (!inFence) {
-            let match = line.match(/^ {0,3}([`~]{3,})/);
-            if (match) {
-                inFence = true;
-                fenceChar = match[1][0]; // ` or ~
-                fenceLength = match[1].length;
-                continue;
-            }
-        } else {
-            // Inside a fence, check for fence end
-            let match = line.match(new RegExp(`^ {0,3}${fenceChar}{${fenceLength},}$`));
-            if (match) {
-                inFence = false;
-                fenceChar = '';
-                fenceLength = 0;
-            }
-            continue; // skip heading checks inside a fence
-        }
-        if (headingRule(state, nextLine, end, true)) {
-            let newPos = state.bMarks[nextLine] + state.tShift[nextLine];
-            let newMax = state.eMarks[nextLine];
-            let newLine = state.src.slice(newPos, newMax);
-            let newLevel = 1;
-            ch = state.src.charCodeAt(++newPos);
-            while (ch === 0x23/* # */ && newPos < newMax && newLevel <= 6) {
-                newLevel++;
-                ch = state.src.charCodeAt(++newPos);
-            }
-            if (newLevel <= level) {
-                break;
-            }
-        }
-    }
     state.md.block.tokenize(state, start + 1, nextLine) // Includes start + 1, does not include nextLine
-    state.push('details_close', 'details', -1)
+    state.push('details_close', 'details', -1);
+    if (nextLine === start) nextLine++;
     state.line = nextLine;
     return true;
 }
@@ -260,6 +194,7 @@ function collapsibleBlock(state, start, end, silent, settings) {
         }
     }
     if (widget === undefined) {
+        //console.error('Undefined block');
         widget = {
             id: Math.random().toString(36).slice(2),
             lineNum: start,

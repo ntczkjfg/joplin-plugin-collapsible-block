@@ -60,16 +60,27 @@
     margin: 0;
 }
 
+:root {
+    --cb-color-0: #a0a0a0;
+    --cb-color-1: #6b5fd6;  /* blue-violet */
+    --cb-color-2: #2bb0e6;  /* bright cyan-blue */
+    --cb-color-3: #6b5fd6;
+    --cb-color-4: #2bb0e6;
+    --cb-color-5: #6b5fd6;
+    --cb-color-6: #2bb0e6;
+    --cb-color-7: #6b5fd6;
+}
+
 /*
 div.cb-nest-n targets text in the editor
 .cb-details.cb-nest-n > summary targets the title of the collapsible in the webview
 .cb-details.cb-nest-n targets the collapsible in the webview
 */
 .cb-dark.cb-nest-0, .cb-dark.cb-details.cb-nest-0 > summary {
-    color: #a0a0a0;
+    color: var(--cb-color-0);
 }
 .cb-dark.cb-details.cb-nest-0 {
-    border-color: #a0a0a0;
+    border-color: var(--cb-color-0);
 }
 .cb-light.cb-nest-0, .cb-light.cb-details.cb-nest-0 > summary {
     color: #404040;
@@ -79,50 +90,50 @@ div.cb-nest-n targets text in the editor
 }
 
 .cb-nest-1, .cb-details.cb-nest-1 > summary {
-    color: firebrick;
+    color: var(--cb-color-1);
 }
 .cb-details.cb-nest-1 {
-    border-color: firebrick;
+    border-color: var(--cb-color-1);
 }
 
 .cb-nest-2, .cb-details.cb-nest-2 > summary {
-    color: darkorange;
+    color: var(--cb-color-2);
 }
 .cb-details.cb-nest-2 {
-    border-color: darkorange;
+    border-color: var(--cb-color-2);
 }
 
 .cb-nest-3, .cb-details.cb-nest-3 > summary {
-    color: gold;
+    color: var(--cb-color-3);
 }
 .cb-details.cb-nest-3 {
-    border-color: gold;
+    border-color: var(--cb-color-3);
 }
 
 .cb-nest-4, .cb-details.cb-nest-4 > summary {
-    color: seagreen;
+    color: var(--cb-color-4);
 }
 .cb-details.cb-nest-4 {
-    border-color: seagreen;
+    border-color: var(--cb-color-4);
 }
 
 .cb-nest-5, .cb-details.cb-nest-5 > summary {
-    color: steelblue;
+    color: var(--cb-color-5);
 }
 .cb-details.cb-nest-5 {
-    border-color: steelblue;
+    border-color: var(--cb-color-5);
 }
 
 .cb-nest-6, .cb-details.cb-nest-6 > summary {
-    color: mediumslateblue;
+    color: var(--cb-color-6);
 }
 .cb-details.cb-nest-6 {
-    border-color: mediumslateblue;
+    border-color: var(--cb-color-6);
 }
 
 .cb-nest-7, .cb-details.cb-nest-7 > summary {
-    color: darkorchid;
+    color: var(--cb-color-7);
 }
 .cb-details.cb-nest-7 {
-    border-color: darkorchid;
+    border-color: var(--cb-color-7);
 }
