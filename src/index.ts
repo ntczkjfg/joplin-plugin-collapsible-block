@@ -329,7 +329,7 @@ async function updateWebview() {
 
 async function updateEditor() {
     const visible = await joplin.settings.globalValue('noteVisiblePanes');
-    //if (!visible || (!visible.includes('editor'))) return;
+    if (!visible || (!visible.includes('editor'))) return;
 
 	await joplin.commands.execute('editor.execCommand',{
 		name: 'replaceRange',

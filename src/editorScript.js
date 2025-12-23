@@ -376,13 +376,15 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     this.collapsibleList[widget.id].doUpdate = region.doUpdate;
                     widget.doUpdate = region.doUpdate;
                 } else {
-                    this.collapsibleList[widget.id] = { id: widget.id,
-                                                        doUpdate: region.doUpdate,
-                                                        isFolded: initial ? region.isFolded : isFolded,
-                                                        lineNum: region.lineNum,
-                                                        lineNumEnd: view.state.doc.lineAt(region.endTo).number,
-                                                        webviewFolded: region.isFolded,
-                                                        heading: region.heading ?? false };
+                    this.collapsibleList[widget.id] = {
+                        id: widget.id,
+                        doUpdate: region.doUpdate,
+                        isFolded: initial ? region.isFolded : isFolded,
+                        lineNum: region.lineNum,
+                        lineNumEnd: view.state.doc.lineAt(region.endTo).number,
+                        webviewFolded: region.isFolded,
+                        heading: region.heading ?? false,
+                    };
                 }
                 const deco = Decoration.widget({ widget }).range(region.foldFrom);
                 if (initial &&
