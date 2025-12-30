@@ -61,7 +61,6 @@ function collapsibleHeader(state, start, end, silent, settings, headingRule) {
         }
     }
     if (!widget || !widget.heading) return false;
-    //console.error(`widget.lineNum = ${widget.lineNum}, widget.lineNumEnd = ${widget.lineNumEnd}`);
     let pos = state.bMarks[start] + state.tShift[start];
     let max = state.eMarks[start];
     let line = state.src.slice(pos, max);
@@ -214,6 +213,7 @@ function collapsibleBlock(state, start, end, silent, settings) {
             isFolded: (title === undefined || !title.startsWith(startToken)),
             doUpdate: (state.src.slice(state.eMarks[endLine] - 2 * endToken.length, state.eMarks[endLine]) !== endToken + endToken),
             webviewFolded: (title === undefined || !title.startsWith(startToken)),
+            editorFolded: (title === undefined || !title.startsWith(startToken)),
             heading: false,
         };
     }
@@ -401,11 +401,13 @@ function buildCollapsibleList(src, startToken, endToken) {
             // Headings! Starts with 0-3 spaces, then 1-6 #s, then a space or tab then anything else - can also end immediately after the #s
             match = line.match(/^ {0,3}(#{1,6})([ \t](.*?)$|$)/);
             if (match) {
+                let foldFrom = doc.line(i).to;
+                if (doc.line(i).text.endsWith(' ')) foldFrom--;
                 const heading = {
                     lineNum: i - 1,
                     order: match[1].length,
-                    from: line.from,
-                    to: line.to,
+                    from: doc.line(i).from,
+                    to: foldFrom,
                     isFolded: line.endsWith(' '),
                     startFrom: doc.line(i).from + line.indexOf('#'),
                     startTo: doc.line(i).from + line.indexOf('#') + match[1].length,
@@ -521,7 +523,8 @@ function buildCollapsibleList(src, startToken, endToken) {
             lineNum: region.lineNum,
             lineNumEnd: doc.lineAt(region.endTo).number,
             webviewFolded: region.isFolded,
-            heading: region.heading ?? false
+            editorFolded: region.isFolded,
+            heading: region.heading ?? false,
         };
     }
     return collapsibleList;

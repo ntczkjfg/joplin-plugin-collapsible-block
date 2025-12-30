@@ -1,27 +1,36 @@
-# Joplin Plugin - Collapsible blocks
+# Joplin Plugin - Collapsible Sections
 
-This Joplin plugin allows you to create collapsible blocks with a title and extendable body. The blocks can be nested within each other, remember whether they were left open or closed, and color-coordinate between the editor and webview. 
+This Joplin plugin allows you to create collapsible blocks with a title and extendable body. The blocks: 
+* Can be nested within one another
+* Remember if they were left opened or closed
+* Can color-coordinate between the editor and webview
+* Collapse in both the editor and the webview
+* Support the use of markdown within them
 
-Although the blocks this plugin creates are only collapsible in the webview, not the editor, it seems to pair well with the "Extra Markdown Editor Settings" plugin, which does allow for collapsing text in the editor, if "Enable code folding" is enabled in its settings. The collapsible blocks made by this plugin are detected by it as code, and are editor-foldable. If you're nesting collapsible blocks, only the outermost one (in the editor) will be foldable with this method. 
+Additionally, this plugin allows you to collapse headings within notes, in both the editor and the webview, with no additional syntax. 
+
+There are many settings available to customize the desired features and behaviors. 
+
+This plugin works on both Desktop and Mobile. 
 
 **Version**: 1.9.0
 
 ### Installation
 
 - Open Joplin and navigate to `Preferences > Plugins`
-- Search for `Collapsible blocks` and click install
+- Search for `Collapsible Sections` and click install
 - Restart Joplin
 
 ### Uninstall
 
 - Open Joplin and navigate to `Tools > Options > Plugins`
-- Find the `Collapsible blocks` plugin
+- Find the `Collapsible Sections` plugin
 - Press `Delete` to remove the plugin, or click the toggle to disable it
 - Restart Joplin
 
 ## Usage
 
-### Collapsible block
+### Collapsible blocks
 
 In order to create a collapsible block, you can:
 - press on the `Collapsible block` toolbar button to create a template collapsible, or
@@ -80,7 +89,20 @@ Blocks will remember if you left them opened or closed. They will do so by editi
 
 If you don't want it to remember if you left a block opened or closed, you can turn this off globally in the plugin settings - or on a per-block basis by doubling the end token, from `}:` to `}:}:`. When you do this, you can still open and close the block in the webview, but they will not save their state in the editor - so the next time the note is loaded, they will be opened or closed again, depending on whether their opening token is `:{:{` or `:{`, respectively. So a block like `:{:{this}:}:` will always be initially open when you open a note, while a block like `:{this}:}:` will always be initially closed when you open a note. 
 
-When nesting blocks within blocks, they will be color-coded in the editor, and may also be color-coded in the webview. These can both be controlled (enabled or disabled) in the plugin Settings tab. 
+When nesting blocks within blocks, they can be color-coded in the editor, and may also be color-coded in the webview. These can both be controlled (enabled or disabled) in the plugin Settings tab. 
+
+### Collapsible Headings
+
+When you create headings within a note (by starting a line with `#`, `##`, `###`, `####`, `#####`, or `######`), this plugin automatically makes them collapsible, with no additional syntax required. This can be enabled or disabled in both the editor and the webview in settings. The collapsible region beneath a heading will extend to the next heading of equal or higher precedence. So, for example, a `#` heading will collapse to the next `#` heading, while a `###` heading will collapse to the next `#`, `##`, or `###` heading. Collapsible headings and collapsible blocks do play nicely with each other, and can be nested freely. 
+
+Headings do remember if they should be left opened or closed (This can be disabled in settings). Due to the lack of special syntax, this is done by adding or removing a space from the end of the line with the heading. A heading with no space at the end is considered opened, while a heading with a space at the end is considered closed. For example:
+
+```
+# This heading does not end in a space, and so will render as opened when the note is loaded
+This text will be visible when the note is loaded. 
+# This heading does end in a space, and so will render as closed when the note is loaded 
+This text will not be visible when the note is loaded. That is because there is a space ↑ here, after the word 'loaded', in the previous line. 
+```
 
 ## Screenshots
 
@@ -88,24 +110,22 @@ Three collapsibles, with one nested inside another, all closed
 
 ![](screenshots/1.png)
 
-With the two outer ones opened
+Various headings and collapsible blocks, all open, with colors enabled
 
 ![](screenshots/2.png)
 
-With all three opened
-
-![](screenshots/3.png)
-
-With a fourth one added, for three nesting levels, and webview colors enabled
-
-![](screenshots/4.png)
+The same note, with some headings and blocks collapsed
 
 ## Settings
 There is a settings page for the plugin in the Joplin options. There, you can:
-* Customize the start and end tokens away from the default `:{` and `}:`
 * Enable or disable the color coding in the webview and editor
+* Customize the start and end tokens away from the default `:{` and `}:`
 * Globally disable the plugin's ability to remember if a collapsible block's opened/closed status was changed in the webview
-* Disable automatic CSS indentation of collapsible block text in the editor, or configure it to indent more or less
+* Disable automatic CSS indentation of collapsible block text in the editor, or configure it to indent more or 
+* Enable or disable collapsing within the editor as well as the webview
+* Toggle whether folding changes in one view automatically trigger folding changes in the other view
+* Enable or disable header-based collapsing in the webview or editor
+* Enable or disable remembering whether headers were left opened or closed
 
 ![](screenshots/settings.png)
 
@@ -126,17 +146,17 @@ details.cb-details summary {
 
 }
 
-/* Below are used for styling nested collapsible blocks, and will only
-be applied if "Do Webview Colors" is enabled in the plugin settings */
-
-/* Styling of nested collapsible blocks - use n = 0-7 */
-.cb-details.cb-nest-n {
-
-}
-
-/* Styling of nested collapsible block titles - use n = 0-7 */
-.cb-details.cb-nest-n > summary {
-
+/* Below are used for coloring nested collapsible blocks, and will
+only be applied if colors are enabled in the plugin settings */
+:root {
+    --cb-color-0: #a0a0a0;
+    --cb-color-1: #6b5fd6;  /* blue-violet */
+    --cb-color-2: #2bb0e6;  /* bright cyan-blue */
+    --cb-color-3: #6b5fd6;
+    --cb-color-4: #2bb0e6;
+    --cb-color-5: #6b5fd6;
+    --cb-color-6: #2bb0e6;
+    --cb-color-7: #6b5fd6;
 }
 ```
 

@@ -16,7 +16,7 @@ joplin.plugins.register({
 		        section: 'collapsibleBlocks',
 		    	public: true,
 		        type: SettingItemType.Bool,
-		        value: true,
+		        value: false,
 		        label: 'Color blocks in the editor',
 		        description: 'Color collapsible block text in the editor. If blocks are nested, each nesting layer is a different color.',
 		    },
@@ -91,7 +91,9 @@ joplin.plugins.register({
 		    	value: true,
 		    	label: 'Keep editor and webview folding in sync',
 		    	description: `When a collapsible section is opened or closed in either the editor or webview, 
-		    	the corresponding section in the other view will update automatically.`,
+		    	the corresponding section in the other view will update automatically. 
+		    	If the option to remember states is turned off, then opening or closing collapsibles in the editor 
+		    	will not be able to immediately sync to the webview in split mode.`,
 		    },
 		    headingsCollapsible: {
 		    	section: 'collapsibleBlocks',
@@ -139,19 +141,36 @@ joplin.plugins.register({
 		    	label: 'collapsibleList'
 		    }
 		});
-		const [
-			lockEditorAndWebview,
+		let lockEditorAndWebview,
 		    blocksRemember,
 		    headingsRemember,
 		    startToken,
-		    endToken,
-		] = await Promise.all([
-		    joplin.settings.value('lockEditorAndWebview'),
-		    joplin.settings.value('blocksRemember'),
-		    joplin.settings.value('headingsRemember'),
-		    joplin.settings.value('startToken'),
-		    joplin.settings.value('endToken'),
-		]);
+		    endToken;
+		async function updateSettings() {
+			[
+				lockEditorAndWebview,
+			    blocksRemember,
+			    headingsRemember,
+			    startToken,
+			    endToken,
+			] = await Promise.all([
+			    joplin.settings.value('lockEditorAndWebview'),
+			    joplin.settings.value('blocksRemember'),
+			    joplin.settings.value('headingsRemember'),
+			    joplin.settings.value('startToken'),
+			    joplin.settings.value('endToken'),
+			]);
+		}
+		await updateSettings();
+		await joplin.settings.onChange(async (event) => {
+			for (const key of event.keys) {
+				if (key !== 'collapsibleList') {
+					await updateSettings();
+					updateEditor();
+					return;
+				}
+			}
+		});
 
 		let collapsibleList: any = {};
 		const note = await joplin.workspace.selectedNote();
@@ -217,15 +236,21 @@ joplin.plugins.register({
 				case 'collapsibleToggle':
 					const { id, isFolded, lineNum } = message.data;
 					if (id in collapsibleList) {
-						if (lockEditorAndWebview || blocksRemember) {
+						if (blocksRemember) {
 							collapsibleList[id].isFolded = isFolded;
+						}
+						if (lockEditorAndWebview) {
+							collapsibleList[id].editorFolded = isFolded;
 						}
 						collapsibleList[id].webviewFolded = isFolded;
 					} else {
 						for (const widget of Object.values(collapsibleList)) {
 							if (widget['lineNum'] === lineNum) {
-								if (lockEditorAndWebview) {
+								if (blocksRemember) {
 									widget['isFolded'] = isFolded;
+								}
+								if (lockEditorAndWebview) {
+									widget['editorFolded'] = isFolded;
 								}
 								widget['webviewFolded'] = isFolded;
 								break;
@@ -254,11 +279,12 @@ joplin.plugins.register({
 		await joplin.contentScripts.onMessage(editorScriptId, async (message: { name: string, data: { [key: string]: any } }) => {
 			switch (message.name) {
 				case 'collapsibleToggle':
+					// Checking if collapsibleList[id] exists so much here because it might be removed asynchronously
 					const { id, isFolded } = message.data;
-					if (collapsibleList[id] && collapsibleList[id].isFolded === isFolded) break;
-					if (collapsibleList[id]) collapsibleList[id].isFolded = isFolded;
+					if (collapsibleList[id]) collapsibleList[id].editorFolded = isFolded;
 					if (lockEditorAndWebview) {
-						if (collapsibleList[id]) collapsibleList[id]['webviewFolded'] = isFolded;
+						if (collapsibleList[id]) collapsibleList[id].webviewFolded = isFolded;
+						if (collapsibleList[id] && ((collapsibleList[id].heading && headingsRemember) || (!collapsibleList[id].heading && blocksRemember))) collapsibleList[id].isFolded = isFolded;
 						await joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
 					}
 					if (!isMobile && (collapsibleList[id] && !collapsibleList[id].doUpdate)) updateWebview();
@@ -312,6 +338,9 @@ joplin.plugins.register({
 
 async function updateWebview() {
 	return;
+	// This function is intended to force the webview to update, without creating an associated change in the content of the editor
+	// I came to the conclusion this is not currently possible, so this function currently does nothing - it is my hope I'll be able
+	// to fix that in a future update
     const visible = await joplin.settings.globalValue('noteVisiblePanes');
     if (!visible || (!visible.includes('viewer'))) return;
     const note = await joplin.workspace.selectedNote();

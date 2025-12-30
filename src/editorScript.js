@@ -8,7 +8,7 @@ export default (context) => {
             const settings = await context.postMessage({ name: 'getSettings', data: {} });
             const { doEditorColors, startToken, endToken, indentLevel,
                 maxIndentLevel, collapsibleInEditor,
-                lockEditorAndWebview, darkMode, rememberOpenOrClose,
+                lockEditorAndWebview, darkMode, blocksRemember,
                 headingsCollapsibleEditor, headingsRemember } = settings;
             // Add codeFolding (with no placeholder) and our foldPlugin
             CodeMirror.addExtension(codeFolding({
@@ -19,7 +19,7 @@ export default (context) => {
             ));
             // Add the editor colors extension
             CodeMirror.addExtension(collapsibleEditorColorsPlugin(
-                settings
+                settings, context.postMessage
             ));
 
             // Dynamically build CSS for indentation based on user settings
@@ -61,6 +61,7 @@ class FoldWidget extends WidgetType {
         super();
         this.id = id;
         this.isFolded = isFolded;
+        this.editorFolded = isFolded;
         this.startFrom = startFrom;
         this.startTo = startTo;
         this.foldFrom = foldFrom;
@@ -71,6 +72,7 @@ class FoldWidget extends WidgetType {
         this.settings = settings;
         this.heading = heading ?? false;
         this.foldConflict = false;
+        this.editorConflict = false;
     }
 
     eq(other) {
@@ -86,89 +88,114 @@ class FoldWidget extends WidgetType {
         }
         const span = document.createElement('span');
         span.className = 'cm-fold-toggle';
-        span.textContent = this.isFolded ? ' ▶ ' : ' ▼ ';
+        span.textContent = this.editorFolded ? ' ▶ ' : ' ▼ ';
         span.style.cursor = 'pointer';
         span.onclick = span.ontouchstart = (e) => {
             e.preventDefault();
-            this.postMessage({ name: 'collapsibleToggle', data: { id: this.id, isFolded: !this.isFolded } });
-            this.toggle(view);
+            this.postMessage({ name: 'collapsibleToggle', data: { id: this.id, isFolded: !this.editorFolded } });
+            let textFold = false;
+            if (this.settings.lockEditorAndWebview && 
+                ((this.heading && this.settings.headingsRemember) || 
+                    (!this.heading && this.settings.blocksRemember))) {
+                textFold = true;
+            }
+            this.toggle(view, true, true, true, textFold);
         };
         this.span = span;
         return span;
     }
 
-    toggle(view, update = true, toggle = true) {
+    toggle(view, update = true, toggle = true, editorFold = true, textFold = true) {
         let effects = { effects: [], changes: [] };
-        const { startToken, lockEditorAndWebview, rememberOpenOrClose, headingsRemember, collapsibleInEditor, headingsCollapsibleEditor } = this.settings;
+        const { startToken, blocksRemember, headingsRemember, lockEditorAndWebview, collapsibleInEditor, headingsCollapsibleEditor  } = this.settings;
 
         const line = view.state.doc.lineAt(this.startFrom);
         const lineText = line.text.replace(/^[ \t]+/, '');
-        if (toggle) this.isFolded = !this.isFolded;
-        if (this.heading && headingsRemember) {
-            const from = this.foldFrom;
-            if (this.isFolded) { // FOLD IT, ADD SPACE
-                if (!line.text.endsWith(' ')) {
-                    effects.changes = [{
-                        from: from,
-                        to: from,
-                        insert: ' ',
-                    }];
-                    this.foldFrom++;
-                    this.foldTo++;
+
+        if (toggle && editorFold) this.editorFolded = !this.editorFolded;
+        if (toggle && textFold) this.isFolded = !this.isFolded;
+
+        this.foldTo = Math.min(this.foldTo, view.state.doc.length);
+        this.endTo = Math.min(this.endTo, view.state.doc.length);
+
+        if (textFold) {
+            if (this.heading && headingsRemember) {
+                const from = this.foldFrom;
+                if (this.isFolded) { // FOLD IT, ADD SPACE
+                    if (!line.text.endsWith(' ')) {
+                        effects.changes = [{
+                            from: from,
+                            to: from,
+                            insert: ' ',
+                        }];
+                        this.foldFrom++;
+                        this.foldTo++;
+                        this.endTo++;
+                    }
+                } else { // UNFOLD IT, REMOVE SPACE
+                    if (line.text.endsWith(' ')) {
+                        effects.changes = [{
+                            from: line.to - 1,
+                            to: line.to,
+                            insert: '',
+                        }]
+                        this.foldFrom--;
+                        this.foldTo--;
+                        this.endTo--;
+                    }
                 }
-            } else { // UNFOLD IT, REMOVE SPACE
-                if (line.text.endsWith(' ')) {
-                    effects.changes = [{
-                        from: line.to - 1,
-                        to: line.to,
-                        insert: '',
-                    }]
-                    this.foldFrom--;
-                    this.foldTo--;
+            } else if (!this.heading && this.doUpdate && blocksRemember) {
+                const from = line.from + line.text.indexOf(startToken);
+                if (!this.isFolded) { // UNFOLD IT, UNDOUBLE START TOKEN
+                    if (!lineText.startsWith(startToken + startToken)) {
+                        effects.changes = [{
+                            from: from,
+                            to: from,
+                            insert: startToken,
+                        }];
+                        this.startTo += startToken.length;
+                        this.foldFrom += startToken.length;
+                        this.foldTo += startToken.length;
+                        this.endTo += startToken.length;
+                    }
+                } else { // FOLD IT, DOUBLE START TOKEN
+                    if (lineText.startsWith(startToken + startToken)) {
+                        effects.changes = [{
+                            from: from,
+                            to: from + startToken.length,
+                            insert: '',
+                        }];
+                        this.startTo -= startToken.length;
+                        this.foldFrom -= startToken.length;
+                        this.foldTo -= startToken.length;
+                        this.endTo -= startToken.length;
+                    }
                 }
-            }
-        } else if (!this.heading && this.doUpdate && (lockEditorAndWebview || rememberOpenOrClose)) {
-            const from = line.from + line.text.indexOf(startToken);
-            if (!this.isFolded) {
-                if (!lineText.startsWith(startToken + startToken)) {
-                    effects.changes = [{
-                        from: from,
-                        to: from,
-                        insert: startToken,
-                    }];
-                    this.foldFrom += startToken.length;
-                    this.foldTo += startToken.length;
-                }
-            } else {
-                if (lineText.startsWith(startToken + startToken)) {
-                    effects.changes = [{
-                        from: from,
-                        to: from + startToken.length,
-                        insert: '',
-                    }];
-                    this.foldFrom -= startToken.length;
-                    this.foldTo -= startToken.length
-                }
-            }
-        }
-        if ((!this.heading && collapsibleInEditor) || (this.heading && headingsCollapsibleEditor)) {
-            if (!this.isFolded) { // UNFOLD IT
-                effects.effects = [
-                    unfoldEffect.of({
-                        from: this.foldFrom,
-                        to: this.foldTo,
-                    })
-                ];
-            } else { // FOLD IT
-                effects.effects = [
-                    foldEffect.of({
-                        from: this.foldFrom,
-                        to: this.foldTo,
-                    })
-                ];
             }
         }
-        if (this.span) this.span.textContent = this.isFolded ? ' ▶ ' : ' ▼ ';
+        if (editorFold) {
+            if ((!this.heading && collapsibleInEditor) || (this.heading && headingsCollapsibleEditor)) {
+                if (!this.editorFolded) { // UNFOLD IT
+                    effects.effects = [
+                        unfoldEffect.of({
+                            from: this.foldFrom,
+                            to: this.foldTo,
+                        })
+                    ];
+                } else { // FOLD IT
+                    if (this.foldFrom !== this.foldTo) {
+                        effects.effects = [
+                            foldEffect.of({
+                                from: this.foldFrom,
+                                to: this.foldTo,
+                            })
+                        ];
+                    }
+                }
+            }
+            if (this.span) this.span.textContent = this.editorFolded ? ' ▶ ' : ' ▼ ';
+        }
+
         if (update) view.dispatch( effects );
         else return effects;
     }
@@ -182,6 +209,8 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
     class {
         constructor(view) {
             try {
+                this.settings = settings;
+                this.justToggledEditor = false;
                 this.currentNoteLength = view.state.doc.length; // Helps detect when the note changes
                 this.foldWidgets = {};
                 this.collapsibleList = {};
@@ -192,18 +221,28 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
             }
         }
 
+        async updateSettings(update) {
+            const settings = await postMessage({ name: 'getSettings', data: {} });
+            if (JSON.stringify(this.settings) === JSON.stringify(settings)) return;
+            this.settings = settings;
+            this.update(undefined, update.view);
+        }
+
         async update(update, view) {
             try {
+                if (update) this.updateSettings(update);
                 for (const key in this.foldWidgets) {
                     if (this.collapsibleList[key]) {
                         this.collapsibleList[key].isFolded = this.foldWidgets[key].isFolded;
+                        this.collapsibleList[key].editorFolded = this.foldWidgets[key].editorFolded;
                     }
                 }
                 if (view || update.docChanged) {
                     const { newNote, updatedHeading } = this.noteChanged(update);
                     if (updatedHeading) {
                         this.collapsibleList = await postMessage({ name: 'getList', data: {} });
-                        this.updateFoldWidgetPositions(update);
+                        this.updateFoldWidgetPositions(update, true);
+                        this.decorations = this.buildDecorations(update.view, true);
                         return;
                     } else if (newNote || view) {
                         view = view ?? update.view;
@@ -215,12 +254,26 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                         this.decorations = this.buildDecorations(update.view, false);
                     }
                 } else if (update.heightChanged && update.geometryChanged && foldedRanges(update.startState) !== foldedRanges(update.state)) {
-                    return;
                     this.decorations = this.buildDecorations(update.view, false);
                 } else if (update.transactions.some(tr => tr.annotations.some(annotation => annotation.value === 'input.type.compose'))) {
                     this.collapsibleList = await postMessage({ name: 'getList', data: {} });
-                    this.updateFoldWidgetPositions(update);
-                    this.decorations = this.buildDecorations(update.view, false);
+                    for (const key in this.collapsibleList) {
+                        if (this.foldWidgets[key]) {
+                            let editorFold = false;
+                            let textFold = false;
+                            if (this.foldWidgets[key].editorFolded !== this.collapsibleList[key].editorFolded) {
+                                this.foldWidgets[key].editorFolded = this.collapsibleList[key].editorFolded;
+                                editorFold = true;
+                            }
+                            if (this.foldWidgets[key].isFolded !== this.collapsibleList[key].isFolded) {
+                                this.foldWidgets[key].isFolded = this.collapsibleList[key].isFolded;
+                                textFold = true;
+                            }
+                            if (editorFold || textFold) {
+                                this.foldWidgets[key].toggle(update.view, true, false, editorFold, textFold);
+                            }
+                        }
+                    }
                 } else {
 
                 }
@@ -230,11 +283,16 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
             }
         }
 
-        updateFoldWidgetPositions(update) {
+        updateFoldWidgetPositions(update, headingUpdate = false) {
             update.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
                 const delta = inserted.length - (toA - fromA);
                 for (const id of Object.keys(this.foldWidgets)) {
                     const widget = this.foldWidgets[id];
+                    widget.foldTo = Math.min(widget.foldTo, update.view.state.doc.length - 1);
+                    widget.endTo = Math.min(widget.endTo, update.view.state.doc.length - 1);
+                    if (headingUpdate && fromA === widget.foldFrom) {
+                        continue;
+                    }
                     if (toA <= widget.endTo) {
                         widget.endTo += delta;
                         widget.lineNumEnd = update.view.state.doc.lineAt(widget.endTo).number;
@@ -243,28 +301,46 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     if (toA < widget.startTo) widget.startTo += delta;
                     if (toA < widget.startFrom) {
                         widget.startFrom += delta;
-                        this.collapsibleList[id].lineNum = update.view.state.doc.lineAt(widget.startFrom).number;
+                        this.collapsibleList[id].lineNum = update.view.state.doc.lineAt(widget.startFrom).number - 1;
                     }
                     // Last because it depends on widget.startFrom being set right
-                    if (toA < widget.foldFrom) widget.foldFrom = update.view.state.doc.lineAt(widget.startFrom).to;
+                    if (toA < widget.foldFrom) {
+                        widget.foldFrom = update.view.state.doc.lineAt(widget.startFrom).to;
+                        if (widget.heading && update.view.state.doc.lineAt(widget.startFrom).text.endsWith(' ')) widget.foldFrom--;
+                    }
                 }
             });
             postMessage({ name: 'setList', data: { collapsibleList: this.collapsibleList } });
         }
 
-        updateFoldWidgets(view) {
-            const effects = { effects: [], changes: [] };
+        moveWidgets(startAt, delta) {
             for (const foldWidget of Object.values(this.foldWidgets)) {
-                if (this.collapsibleList[foldWidget.id].isFolded != foldWidget.isFolded) {
-                    const newEffects = foldWidget.toggle(view, false);
-                    effects.effects = [...effects.effects, ...newEffects.effects];
-                    effects.changes = [...effects.changes, ...newEffects.changes];
-                } else if (foldWidget.foldConflict) {
-                    const newEffects = foldWidget.toggle(view, false, false);
-                    effects.effects = [...effects.effects, ...newEffects.effects];
-                    effects.changes = [...effects.changes, ...newEffects.changes];
+                if (foldWidget.startFrom > startAt) {
+                    foldWidget.startFrom += delta;
+                    foldWidget.startTo += delta;
+                    foldWidget.foldFrom += delta;
+                    foldWidget.foldTo += delta;
+                    foldWidget.endTo += delta;
                 }
             }
+        }
+
+        updateFoldWidgets(view) {
+            let effects = { effects: [], changes: [] };
+            for (const foldWidget of Object.values(this.foldWidgets)
+                .sort((a, b) => b.startFrom - a.startFrom)) {
+                let newEffects = { effects: [], changes: [] };
+                if (foldWidget.foldConflict || foldWidget.editorConflict) {
+                    newEffects = foldWidget.toggle(view, false, false, foldWidget.editorConflict, foldWidget.foldConflict);
+                } else {
+                    const editorMismatch = this.collapsibleList[foldWidget.id].editorFolded !== foldWidget.editorFolded;
+                    const textMismatch = this.collapsibleList[foldWidget.id].isFolded !== foldWidget.isFolded;
+                    if (editorMismatch || textMismatch) newEffects = foldWidget.toggle(view, false, true, editorMismatch, textMismatch);
+                }
+                effects.effects = [...newEffects.effects, ...effects.effects];
+                effects.changes = [...newEffects.changes, ...effects.changes];
+            }
+            if (effects.changes.length) this.justToggledEditor = true;
             setTimeout(() => { view.dispatch( effects ) }, 0);
         }
 
@@ -282,14 +358,14 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 }
                 if (fromA === toA && inserted.toString() === ' ') {
                     for (const widget in this.foldWidgets) {
-                        if (fromA === this.foldWidgets[widget].foldFrom) {
+                        if (fromA === this.foldWidgets[widget].foldFrom - 1) {
                             updatedHeading = true;
                             break;
                         }
                     }
                 } else if (fromA + 1 === toA && inserted.toString() === '') {
                     for (const widget in this.foldWidgets) {
-                        if (fromA === this.foldWidgets[widget].foldFrom - 1) {
+                        if (fromA === this.foldWidgets[widget].foldFrom) {
                             updatedHeading = true;
                             break;
                         }
@@ -325,33 +401,38 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 }
                 if (del) {
                     //console.error('DELETING WIDGET!');
-                    effects.push(unfoldEffect.of({ from: foldWidget.foldFrom, to: foldWidget.foldTo }));
+                    if (foldWidget.foldFrom !== foldWidget.foldTo) effects.push(unfoldEffect.of({ from: foldWidget.foldFrom, to: foldWidget.foldTo }));
                     delete this.foldWidgets[id];
                     if (id in this.collapsibleList) delete this.collapsibleList[id];
                 }
             }
             for (const region of regions) {
                 // Determine if this region is folded or unfolded in the editor
-                let isFolded = false;
-                if ((!region.heading && settings.collapsibleInEditor) || (region.heading && settings.headingsCollapsibleEditor)) {
+                let editorFolded = false;
+                if ((!region.heading && this.settings.collapsibleInEditor) || (region.heading && this.settings.headingsCollapsibleEditor)) {
                     // Will iterate over all folded regions in the editor which intersect the interval [region.foldFrom, region.foldTo]
                     // Exits iteration early if false returned
                     folded.between(region.foldFrom, region.foldTo, (foldedFrom, foldedTo, foldedValue) => {
                         if (foldedFrom === region.foldFrom && foldedTo === region.foldTo) {
-                            isFolded = true;
+                            editorFolded = true;
                             return false;
                         }
                     });
-                } else {
-                    const line = view.state.doc.lineAt(region.startFrom);
-                    const lineText = line.text.replace(/^[ \t]+/, "");
-                    isFolded = !lineText.startsWith(settings.startToken + settings.startToken);
                 }
+
+                const line = view.state.doc.lineAt(region.startFrom);
+                const lineText = line.text.replace(/^[ \t]+/, "");
+                const isFolded = !lineText.startsWith(this.settings.startToken + this.settings.startToken);
 
                 let widget;
                 for (const foldWidget of Object.values(this.foldWidgets)) {
                     if (foldWidget.foldFrom === region.foldFrom && foldWidget.foldTo === region.foldTo) {
-                        if (foldWidget.isFolded !== isFolded) foldWidget.foldConflict = true;
+                        if (foldWidget.editorFolded !== editorFolded) {
+                            foldWidget.editorConflict = true;
+                        }
+                        if (foldWidget.isFolded !== isFolded) {
+                            foldWidget.foldConflict = true;
+                        }
                         widget = foldWidget;
                         break;
                     }
@@ -366,7 +447,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                                             region.endTo,
                                             region.doUpdate,
                                             postMessage,
-                                            settings,
+                                            this.settings,
                                             region.heading
                                             );
                     this.foldWidgets[widget.id] = widget;
@@ -383,14 +464,15 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                         lineNum: region.lineNum,
                         lineNumEnd: view.state.doc.lineAt(region.endTo).number,
                         webviewFolded: region.isFolded,
+                        editorFolded: region.isFolded,
                         heading: region.heading ?? false,
                     };
                 }
                 const deco = Decoration.widget({ widget }).range(region.foldFrom);
                 if (initial &&
                     region.isFolded &&
-                    ((!widget.heading && settings.collapsibleInEditor) || (widget.heading && settings.headingsCollapsibleEditor)) &&
-                    settings.lockEditorAndWebview) {
+                    ((!widget.heading && this.settings.collapsibleInEditor) || (widget.heading && this.settings.headingsCollapsibleEditor)) &&
+                    this.settings.lockEditorAndWebview && region.foldFrom !== region.foldTo) {
                     effects.push(foldEffect.of({ from: region.foldFrom, to: region.foldTo }));
                     widget.isFolded = true;
                 }
@@ -398,7 +480,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 builder.push(deco);
             }
             postMessage({ name: 'setList', data: { collapsibleList: this.collapsibleList } });
-            if (settings.collapsibleInEditor || settings.headingsCollapsibleEditor || settings.rememberOpenOrClose) {
+            if (this.settings.collapsibleInEditor || this.settings.headingsCollapsibleEditor || this.settings.blocksRemember || this.settings.headingsRemember) {
                 this.updateFoldWidgets(view);
             }
             if (effects) setTimeout(() => {view.dispatch({ effects: effects });}, 0);
@@ -406,7 +488,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
         }
 
         processLines(doc) {
-            const { startToken, endToken } = settings;
+            const { startToken, endToken } = this.settings;
             const regions = [];
             let inCodeBlock = false;
             let codeBlockChar = '';
@@ -440,11 +522,13 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 // Headings! Starts with 0-3 spaces, then 1-6 #s, then a space or tab then anything else - can also end immediately after the #s
                 match = line.match(/^ {0,3}(#{1,6})([ \t](.*?)$|$)/);
                 if (match) {
+                    let foldFrom = doc.line(i).to;
+                    //if (doc.line(i).text.endsWith(' ')) foldFrom--;
                     const heading = {
                         lineNum: i - 1,
                         order: match[1].length,
                         from: doc.line(i).from,
-                        to: doc.line(i).to,
+                        to: foldFrom,
                         isFolded: line.endsWith(' '),
                         startFrom: doc.line(i).from + line.indexOf('#'),
                         startTo: doc.line(i).from + line.indexOf('#') + match[1].length,
@@ -572,17 +656,27 @@ EDITOR COLORS PLUGIN
 */
 
 // Defines a CodeMirror view plugin that updates decorations on relevant changes
-const collapsibleEditorColorsPlugin = (settings) => ViewPlugin.fromClass(
+const collapsibleEditorColorsPlugin = (settings, postMessage) => ViewPlugin.fromClass(
     class {
         constructor(view) {
             try {
+                this.settings = settings;
                 this.decorations = this.findCollapsibles(view);
             } catch (e) {
                 console.error('Error in color plugin constructor:', e);
             }
         }
-        update(update) {
-            if (update.docChanged || update.viewportChanged) {
+
+        async updateSettings(update) {
+            const settings = await postMessage({ name: 'getSettings', data: {} });
+            if (JSON.stringify(this.settings) === JSON.stringify(settings)) return;
+            this.settings = settings;
+            this.update(update, true);
+        }
+
+        update(update, force) {
+            this.updateSettings(update);
+            if (update.docChanged || update.viewportChanged || force) {
                 try {
                     this.decorations = this.findCollapsibles(update.view);
                 } catch (e) {
@@ -592,7 +686,7 @@ const collapsibleEditorColorsPlugin = (settings) => ViewPlugin.fromClass(
         }
 
         processLines(doc) {
-            const { startToken, endToken } = settings;
+            const { startToken, endToken } = this.settings;
             let docLines = [''];
             for (let i = 1, line; i <= doc.lines; i++) { // Yes it indexes from 1
                 line = doc.line(i).text;
@@ -688,12 +782,12 @@ const collapsibleEditorColorsPlugin = (settings) => ViewPlugin.fromClass(
                 let [lineNum, nestLevel, indentLevel] = lines[i];
                 // We only support 8 colors, so nestLevel goes from 0-7 then repeats
                 nestLevel = (nestLevel - 1) % 8;
-                indentLevel = Math.min(indentLevel, settings.maxIndentLevel);
+                indentLevel = Math.min(indentLevel, this.settings.maxIndentLevel);
                 const from = view.state.doc.line(lineNum).from;
                 let classes = 'cb';
-                if (settings.darkMode) classes += ' cb-dark';
+                if (this.settings.darkMode) classes += ' cb-dark';
                 else classes += ' cb-light';
-                if (settings.doEditorColors) {
+                if (this.settings.doEditorColors) {
                     classes += ` cb-nest-${nestLevel}`;
                 }
                 if (indentLevel) {
