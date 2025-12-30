@@ -106,15 +106,12 @@ This text will not be visible when the note is loaded. That is because there is 
 
 ## Screenshots
 
-Three collapsibles, with one nested inside another, all closed
-
+Various headings and collapsible blocks, all open, with colors enabled
 ![](screenshots/1.png)
 
-Various headings and collapsible blocks, all open, with colors enabled
-
+The same note, with some headings and blocks collapsed
 ![](screenshots/2.png)
 
-The same note, with some headings and blocks collapsed
 
 ## Settings
 There is a settings page for the plugin in the Joplin options. There, you can:
