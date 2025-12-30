@@ -166,7 +166,7 @@ joplin.plugins.register({
 			for (const key of event.keys) {
 				if (key !== 'collapsibleList') {
 					await updateSettings();
-					updateEditor();
+					updateEditor(isMobile);
 					return;
 				}
 			}
@@ -260,7 +260,7 @@ joplin.plugins.register({
 					joplin.settings.setValue('collapsibleList', JSON.stringify(collapsibleList));
 					// Forces the editor to update even though nothing changed
 					// Moreso, does so in a way we can detect
-					updateEditor();
+					updateEditor(isMobile);
 					break;
 				default:
 					break;
@@ -356,9 +356,10 @@ async function updateWebview() {
     });
 }
 
-async function updateEditor() {
-    const visible = await joplin.settings.globalValue('noteVisiblePanes');
-    if (!visible || (!visible.includes('editor'))) return;
+async function updateEditor(isMobile) {
+    //const visible = await joplin.settings.globalValue('noteVisiblePanes');
+    //if (!visible || (!visible.includes('editor'))) return;
+    if (isMobile) return;
 
 	await joplin.commands.execute('editor.execCommand',{
 		name: 'replaceRange',
