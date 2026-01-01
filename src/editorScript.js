@@ -133,15 +133,17 @@ class FoldWidget extends WidgetType {
                         this.endTo++;
                     }
                 } else { // UNFOLD IT, REMOVE SPACE
-                    if (line.text.endsWith(' ')) {
+                    const match = line.text.match(/ +$/);
+                    if (match) {
+                        const spacesLength = match[0].length;
                         effects.changes = [{
-                            from: line.to - 1,
+                            from: line.to - spacesLength,
                             to: line.to,
                             insert: '',
-                        }]
-                        this.foldFrom--;
-                        this.foldTo--;
-                        this.endTo--;
+                        }];
+                        this.foldFrom -= spacesLength;
+                        this.foldTo -= spacesLength;
+                        this.endTo -= spacesLength;
                     }
                 }
             } else if (!this.heading && this.doUpdate && blocksRemember) {
@@ -288,6 +290,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                 const delta = inserted.length - (toA - fromA);
                 for (const id of Object.keys(this.foldWidgets)) {
                     const widget = this.foldWidgets[id];
+                    widget.startFrom = Math.min(widget.startFrom, update.view.state.doc.length - 1);
                     widget.foldTo = Math.min(widget.foldTo, update.view.state.doc.length - 1);
                     widget.endTo = Math.min(widget.endTo, update.view.state.doc.length - 1);
                     if (headingUpdate && fromA === widget.foldFrom) {

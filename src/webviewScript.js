@@ -75,7 +75,7 @@ function collapsibleHeader(state, start, end, silent, settings, headingRule) {
     } else {
         openFlag = [ 'open', '' ];
     }
-    const nextLine = widget.lineNumEnd;
+    let nextLine = widget.lineNumEnd;
 
     let token = state.push('details_open', 'details', 1);
     // ontoggle sends message to index.ts, which modifies the editor to mark the block as opened or closed

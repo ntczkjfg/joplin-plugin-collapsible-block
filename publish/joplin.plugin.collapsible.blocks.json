@@ -2,7 +2,7 @@
 	"manifest_version": 1,
 	"id": "joplin.plugin.collapsible.blocks",
 	"app_min_version": "3.3",
-	"version": "1.9.0",
+	"version": "1.9.1",
 	"name": "Collapsible Sections",
 	"description": "Create collapsible blocks with title and extendable body, and make headings collapsible too.",
 	"author": "ntczkjfg",
@@ -29,6 +29,6 @@
 		"desktop",
 		"mobile"
 	],
-	"_publish_hash": "sha256:9a748a55e83223a65f7da51612cf0fe3fdc9fc230e8113bee5dcd477a7ac3259",
-	"_publish_commit": "master:c24d4890c00825ba39d4d67210136d29a992a078"
+	"_publish_hash": "sha256:35a824afb575d56213a29c28a6eb9d508c6149748081e070ba3027f68af0a674",
+	"_publish_commit": "master:dcb50637167916ac6bfad25ae4437473535d65e2"
 }
