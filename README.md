@@ -13,7 +13,7 @@ There are many settings available to customize the desired features and behavior
 
 This plugin works on both Desktop and Mobile. 
 
-**Version**: 1.9.1
+**Version**: 1.9.3
 
 ### Installation
 

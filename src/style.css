@@ -3,6 +3,7 @@
 .cb-heading > summary {
     list-style: none;   /* hide default arrow */
     position: relative; /* Lets us manually position the arrow in ::after block */
+    padding-right: 1.2em;
 }
 
 /* Prevents block from having a top margin if it's the first element of the page */

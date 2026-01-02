@@ -83,7 +83,7 @@ function collapsibleHeader(state, start, end, silent, settings, headingRule) {
                    [ 'ontoggle',   `if ((this.open !== !this.hasAttribute('closed')) || this.hasAttribute('debounce')) {
                                         webviewApi.postMessage('${pluginId}', { name: 'collapsibleToggle',
                                                                                 data: { isFolded: !this.open,
-                                                                                        lineNum: ${state.line + 1},
+                                                                                        lineNum: ${state.line},
                                                                                         id: '${widget.id}',
                                                                                       }
                                                                               }
@@ -366,6 +366,7 @@ function makeDocFromSrc(src) {
 function buildCollapsibleList(src, startToken, endToken) {
     const doc = makeDocFromSrc(src);
     const settings = { startToken, endToken };
+    // When updating below, copy/paste from editorScript.js, add 'function' to start, remove 'this.' from first line with settings
     function processLines(doc) {
         const { startToken, endToken } = settings;
         const regions = [];
@@ -402,7 +403,7 @@ function buildCollapsibleList(src, startToken, endToken) {
             match = line.match(/^ {0,3}(#{1,6})([ \t](.*?)$|$)/);
             if (match) {
                 let foldFrom = doc.line(i).to;
-                if (doc.line(i).text.endsWith(' ')) foldFrom--;
+                //if (doc.line(i).text.endsWith(' ')) foldFrom--;
                 const heading = {
                     lineNum: i - 1,
                     order: match[1].length,

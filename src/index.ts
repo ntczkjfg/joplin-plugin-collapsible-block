@@ -376,7 +376,7 @@ async function modifyEditor(collapsible: any, noteId: string, startToken: string
 
     if (!('heading' in collapsible)) collapsible.heading = line.match(/^ {0,3}(#{1,6})([ \t](.*?)$|$)/);
 
-    let newLine = line;
+    let newLine;
     if (!collapsible.heading) {
         // It should be guaranteed that the line starts with our token, possibly after whitespace
         // Calculate its actual start position - quit if for some reason it's not there
@@ -399,7 +399,7 @@ async function modifyEditor(collapsible: any, noteId: string, startToken: string
         }
     }
     // Only bother updating the editor if we changed something
-    if (newLine !== line) {
+    if (newLine) {
         lines[collapsible.lineNum] = newLine;
         await joplin.data.put(['notes', note.id], null, { body : lines.join('\n') });
     }

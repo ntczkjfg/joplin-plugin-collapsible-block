@@ -304,7 +304,7 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
                     if (toA < widget.startTo) widget.startTo += delta;
                     if (toA < widget.startFrom) {
                         widget.startFrom += delta;
-                        this.collapsibleList[id].lineNum = update.view.state.doc.lineAt(widget.startFrom).number - 1;
+                        if (this.collapsibleList[id]) this.collapsibleList[id].lineNum = update.view.state.doc.lineAt(widget.startFrom).number - 1;
                     }
                     // Last because it depends on widget.startFrom being set right
                     if (toA < widget.foldFrom) {
