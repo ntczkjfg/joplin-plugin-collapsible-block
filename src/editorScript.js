@@ -505,15 +505,23 @@ const foldPlugin = (settings, postMessage) => ViewPlugin.fromClass(
             for (let i = 1; i <= doc.lines; i++) { // doc.lines indexes from 1
                 const line = doc.line(i).text;
                 if (!inCodeBlock) {
-                    match = line.match(/^ {0,3}([`~]{3,})/);
+                    match = line.match(/^ {0,3}(`{3,}|~{3,})/);
                     if (match) {
+						const char = match[1][0];
+                        const len = match[1].length;
+						if (char === '`') {
+							// A code block starting with backticks, but containing more backticks
+							// on the same opening line, is rendered invalid, and is inline code at best, nothing at worst
+                            const remainder = line.slice(match[0].length);
+                            if (remainder.includes('`')) continue;
+                        }
                         inCodeBlock = true;
-                        codeBlockChar = match[1][0];
-                        codeBlockLen = match[1].length;
+                        codeBlockChar = char;
+                        codeBlockLen = len;
                         continue;
                     }
                 } else {
-                    match = line.match(new RegExp(`^ {0,3}${codeBlockChar}{${codeBlockLen},}$`));
+                    match = line.match(new RegExp(`^ {0,3}${codeBlockChar}{${codeBlockLen},}[ \\t]*$`));
                     if (match) {
                         inCodeBlock = false;
                         codeBlockChar = '';
@@ -709,15 +717,24 @@ const collapsibleEditorColorsPlugin = (settings, postMessage) => ViewPlugin.from
             let codeBlockLen = 0;
             for (let i = 1; i < docLines.length; i++) {
                 if (!inCodeBlock) {
-                    let match = docLines[i].match(/^ {0,3}([`~]{3,})/);
+                    let match = docLines[i].match(/^ {0,3}(`{3,}|~{3,})/);
                     if (match) {
+						const char = match[1][0];
+						const len = match[1].length;
+						if (char == '`') {
+							// A code block starting with backticks, but containing more backticks
+							// on the same opening line, is rendered invalid, and is inline code at best, nothing at worst
+							const remainder = docLines[i].slice(match[0].length);
+							if (remainder.includes('`')) continue;
+						}
+						
                         inCodeBlock = true;
-                        codeBlockChar = match[1][0];
-                        codeBlockLen = match[1].length;
+                        codeBlockChar = char;
+                        codeBlockLen = len;
                         continue;
                     }
                 } else {
-                    let match = docLines[i].match(new RegExp(`^ {0,3}${codeBlockChar}{${codeBlockLen},}$`));
+                    let match = docLines[i].match(new RegExp(`^ {0,3}${codeBlockChar}{${codeBlockLen},}[ \\t]*$`));
                     if (match) {
                         inCodeBlock = false;
                         codeBlockChar = '';
